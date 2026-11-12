@@ -1,0 +1,257 @@
+// Local checks for the pnpm/TypeScript monorepo.
+// The aggregate command is `mise run check`, which runs `hk check --all`.
+amends "package://github.com/jdx/hk/releases/download/v2.10.0/hk@2.10.0#/Config.pkl"
+
+min_hk_version = "2.10.0"
+fail_fast = false
+
+local oxlint = new Step {
+  glob = List(
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.ts",
+    "**/*.tsx",
+  )
+  exclude = List(
+    "**/dist/**",
+    "**/node_modules/**",
+    "packages/server/src/generated/**",
+    "packages/web/src/sdk/**",
+  )
+  check = "pnpm exec oxlint --deny-warnings {{files}}"
+  fix = "pnpm exec oxlint --fix {{files}}"
+}
+
+local oxfmt = new Step {
+  glob = List(
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.json",
+    "**/*.jsonc",
+    "**/*.css",
+    "**/*.scss",
+  )
+  exclude = List(
+    "**/dist/**",
+    "**/node_modules/**",
+    "packages/spec/openapi.json",
+    // Written by drizzle-kit; formatting it would dirty the tree after every generate.
+    "packages/server/drizzle/**",
+    "packages/server/src/generated/**",
+    "packages/web/src/sdk/**",
+  )
+  depends = "oxlint"
+  check = "pnpm exec oxfmt --check {{files}}"
+  fix = "pnpm exec oxfmt {{files}}"
+}
+
+local betterleaks = new Step {
+  glob = List("**/*")
+  exclude = List(
+    ".git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "pnpm-lock.yaml",
+    "packages/spec/openapi.json",
+    "packages/server/src/generated/**",
+    "packages/web/src/sdk/**",
+  )
+  check = "betterleaks dir --config .betterleaks.toml --no-banner --redact=100 {{files}}"
+}
+
+// A suppression may hide a security finding only until its review date.
+local suppressionDates = new Step {
+  glob = List(
+    ".betterleaks.toml",
+    "osv-scanner.toml",
+    ".oxlintrc.json",
+    "scripts/check-suppression-dates.mjs",
+  )
+  check = "node scripts/check-suppression-dates.mjs"
+}
+
+local jactionlint = new Step {
+  glob = List(
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    ".github/dependabot.yml",
+    ".github/dependabot.yaml",
+  )
+  check = "jactionlint"
+}
+
+local syncpack = new Step {
+  glob = List("package.json", "packages/*/package.json")
+  check = "pnpm exec syncpack lint"
+}
+
+local hadolint = new Step {
+  glob = List("Dockerfile", "**/Dockerfile", "**/*.Dockerfile")
+  check = "hadolint {{files}}"
+}
+
+local typos = new Step {
+  glob = List("**/*")
+  exclude = List(
+    ".git/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "pnpm-lock.yaml",
+    // Vendored third-party agent skills (mattpocock/skills), not our prose.
+    ".agents/skills/**",
+    "packages/spec/openapi.json",
+    "packages/server/src/generated/**",
+    "packages/web/src/sdk/**",
+  )
+  check = "typos {{files}}"
+}
+
+local rumdl = new Step {
+  glob = List("**/*.md")
+  exclude = List(
+    ".agents/skills/**",
+    ".idea/**",
+    "**/dist/**",
+    "**/node_modules/**",
+  )
+  check = "rumdl check {{files}}"
+  fix = "rumdl fmt {{files}}"
+}
+
+local agnix = new Step {
+  glob = List(
+    "AGENTS.md",
+    "AGENTS.local.md",
+    "AGENTS.override.md",
+    "CLAUDE.md",
+    ".claude/**",
+    ".codex/**",
+    ".cursor/**",
+    ".opencode/**",
+    ".github/copilot-instructions.md",
+    "opencode.json",
+    "opencode.jsonc",
+  )
+  check = "pnpm exec agnix --strict ."
+}
+
+local lychee = new Step {
+  glob = List("**/*.md")
+  exclude = List(
+    "**/dist/**",
+    "**/node_modules/**",
+  )
+  check = "lychee --config lychee.toml --no-progress {{files}}"
+}
+
+// Lint the generated OpenAPI document. Errors fail; warnings are reported only.
+// The document is gitignored, so the tracked TypeSpec source is the trigger;
+// `mise run check` regenerates it before `hk check --all` runs.
+local vacuum = new Step {
+  glob = List("packages/spec/main.tsp")
+  check = "vacuum lint packages/spec/openapi.json --no-banner --no-update-check --fail-severity error"
+}
+
+local knip = new Step {
+  check = "pnpm exec knip --no-progress"
+}
+
+local typecheck = new Step {
+  check = "pnpm -r typecheck"
+}
+
+local depcruise = new Step {
+  check = "pnpm deps:check"
+}
+
+local test = new Step {
+  check = "mise run test"
+}
+
+local commitlint = new Step {
+  check = "pnpm exec commitlint --edit {{commit_msg_file}}"
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stage = true
+    stash = "git"
+    steps {
+      ["oxlint"] = oxlint
+      ["oxfmt"] = oxfmt
+      ["syncpack"] = syncpack
+      ["hadolint"] = hadolint
+      ["typos"] = typos
+      ["rumdl"] = rumdl
+      ["agnix"] = agnix
+      ["vacuum"] = vacuum
+      ["betterleaks"] = betterleaks
+      ["suppressionDates"] = suppressionDates
+      ["jactionlint"] = jactionlint
+    }
+  }
+
+  ["pre-push"] {
+    steps {
+      ["oxlint"] = oxlint
+      ["oxfmt"] = oxfmt
+      ["syncpack"] = syncpack
+      ["hadolint"] = hadolint
+      ["typos"] = typos
+      ["rumdl"] = rumdl
+      ["agnix"] = agnix
+      ["vacuum"] = vacuum
+      ["knip"] = knip
+      ["typecheck"] = typecheck
+      ["depcruise"] = depcruise
+      ["test"] = test
+      ["betterleaks"] = betterleaks
+      ["suppressionDates"] = suppressionDates
+      ["jactionlint"] = jactionlint
+    }
+  }
+
+  ["check"] {
+    steps {
+      ["oxlint"] = oxlint
+      ["oxfmt"] = oxfmt
+      ["syncpack"] = syncpack
+      ["hadolint"] = hadolint
+      ["typos"] = typos
+      ["rumdl"] = rumdl
+      ["agnix"] = agnix
+      ["vacuum"] = vacuum
+      ["knip"] = knip
+      ["typecheck"] = typecheck
+      ["depcruise"] = depcruise
+      ["test"] = test
+      ["betterleaks"] = betterleaks
+      ["suppressionDates"] = suppressionDates
+      ["jactionlint"] = jactionlint
+    }
+  }
+
+  ["links"] {
+    steps {
+      ["lychee"] = lychee
+    }
+  }
+
+  ["fix"] {
+    fix = true
+    steps {
+      ["oxlint"] = oxlint
+      ["oxfmt"] = oxfmt
+      ["rumdl"] = rumdl
+    }
+  }
+
+  ["commit-msg"] {
+    steps {
+      ["commitlint"] = commitlint
+    }
+  }
+}

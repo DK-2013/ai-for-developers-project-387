@@ -1,0 +1,93 @@
+name: quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: call_calendar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d call_calendar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/call_calendar
+      # --skip-deps only applies to the named task. The `test` step in hk runs
+      # `mise run test`, whose db:up dependency would start Compose on host
+      # port 5432 and collide with the service above.
+      MISE_TASK_SKIP_DEPENDS: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          install: true
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint commit messages
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            from="$PR_BASE"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            from="$PUSH_BEFORE"
+          else
+            from="HEAD~1"
+          fi
+          if [ "$from" = "$(git rev-parse HEAD)" ]; then
+            echo "No new commits to lint."
+            exit 0
+          fi
+          pnpm exec commitlint --from "$from" --to HEAD --verbose
+
+      - name: Generate code
+        run: pnpm codegen
+
+      - name: Verify generated files
+        run: |
+          test -f packages/spec/openapi.json
+          test -d packages/server/src/generated
+          test -d packages/web/src/sdk
+          test -n "$(find packages/server/src/generated packages/web/src/sdk -type f -print -quit)"
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Run the full gate
+        # PostgreSQL comes from the service above, so skip the db:up and codegen
+        # dependencies (the previous step already generated the code).
+        run: mise run --skip-deps verify

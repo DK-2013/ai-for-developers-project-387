@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "render": {
+        "type": "remote",
+        "url": "https://mcp.render.com/mcp",
+        "oauth": false,
+        "headers": {
+          "Authorization": "Bearer {env:RENDER_API_KEY}"
+        }
+      },
+      "qmd": {
+        "type": "local",
+        "command": ["qmd", "mcp"]
+      },
+      "playwright": {
+        "type": "local",
+        "command": ["playwright-mcp", "--browser", "chromium"]
+      },
+      "chrome-devtools": {
+        "type": "local",
+        "command": ["node", "scripts/chrome-devtools-mcp.mjs"]
+      }
+    }
+  }
+}
