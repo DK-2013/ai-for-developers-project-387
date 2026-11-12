@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Installed by mise (npm:chrome-devtools-mcp), not a package.json dependency.
+  "ignoreBinaries": ["chrome-devtools-mcp"],
+  "workspaces": {
+    ".": {
+      // Invoked from hk.pkl, not from a package script.
+      "ignoreDependencies": ["agnix", "syncpack"],
+      // Invoked from opencode.json as the chrome-devtools MCP command.
+      "entry": ["scripts/chrome-devtools-mcp.mjs"],
+    },
+    "packages/spec": {
+      // TypeSpec emitters are declared in tspconfig.yaml, not imported from TypeScript.
+      "ignoreDependencies": [
+        "@typespec/http",
+        "@typespec/http-client-js",
+        "@typespec/http-server-js",
+        "@typespec/openapi3",
+      ],
+    },
+    "packages/web": {
+      // Imported by the generated @calendar/sdk sources, which are pulled in
+      // through the `@calendar/sdk` alias rather than as a workspace package.
+      "ignoreDependencies": ["@typespec/ts-http-runtime", "uri-template"],
+    },
+  },
+}
