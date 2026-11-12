@@ -7,3 +7,5 @@ The repo adopts the checks from `mokevnin/dev-quality-gates` that can fail on so
 **Deferred, each with the trigger that reopens it:** squawk — the first SQL migration in `packages/server/drizzle/`; check-jsonschema — a JSON or YAML file the repo does not generate itself; stylelint — CSS rules beyond the Tailwind entry file; axe — a requirement for accessibility in `docs/SPEC.md` or a recorded accessibility defect (Playwright Test now runs the browser, but axe stays deferred until that trigger); size-limit — an explicit bundle budget; diff-cover — a coverage threshold.
 
 **Consequences:** a new gate is added only together with the defect it prevents, and an unlisted deferred gate stays out until its trigger appears, so the check list does not grow by imitation.
+
+**Source:** imported from [386#2](https://github.com/DK-2013/ai-for-developers-project-386/issues/2), [386#18](https://github.com/DK-2013/ai-for-developers-project-386/issues/18), and [386#36](https://github.com/DK-2013/ai-for-developers-project-386/issues/36) — see `docs/UPSTREAM.md`.

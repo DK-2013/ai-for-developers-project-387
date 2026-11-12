@@ -50,3 +50,4 @@ Commits: Conventional Commits, lines ≤ 100 chars, ticketed commits end with `(
 - Browser verification checklist: `docs/agents/browser-checks.md`.
 - Issues (`gh` CLI): `docs/agents/issue-tracker.md`; triage labels: `docs/agents/triage-labels.md`.
 - Domain model: `GLOSSARY.md` + `docs/adr/`, see `docs/agents/domain.md`.
+- Import provenance and the source ticket mapping: `docs/UPSTREAM.md`.

@@ -216,7 +216,7 @@ API будет доступен на <http://localhost:3000>. Внутри об�
 
 ## Деплой
 
-Этот репозиторий пока не развёрнут: отдельный сервис Render для него не создан. Развёрнутая копия базового проекта доступна на [Render](https://ai-for-developers-project-386-nang.onrender.com) в репозитории [386](https://github.com/DK-2013/ai-for-developers-project-386).
+Этот репозиторий развёрнут на [Render](https://ai-for-developers-project-387-uzc9.onrender.com).
 
 Render собирает сервис из корневого `Dockerfile` и передаёт приложению переменную окружения `PORT`; сервер слушает именно этот порт. Healthcheck указывает на `/healthz`. Бесплатный web service Render засыпает при простое, поэтому первый запрос после паузы может занять до минуты.
 
