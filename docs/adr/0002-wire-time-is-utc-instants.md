@@ -7,3 +7,5 @@ Every `startAt` and `endAt` on the wire is an RFC 3339 UTC instant, and `SlotLis
 **Consequences:** the client formats instants itself, and any consumer that groups slots by day needs the `timezone` field.
 
 > Display note superseded: this ADR originally implied the guest calendar renders in the owner's zone. [ADR 0004](0004-guest-calendar-renders-in-guest-timezone.md) moved rendering to the guest's browser zone; the wire decision above stands.
+
+**Source:** imported from [386#3](https://github.com/DK-2013/ai-for-developers-project-386/issues/3) and [386#6](https://github.com/DK-2013/ai-for-developers-project-386/issues/6) — see `docs/UPSTREAM.md`.
