@@ -78,6 +78,7 @@ local jactionlint = new Step {
     ".github/workflows/*.yaml",
     ".github/dependabot.yml",
     ".github/dependabot.yaml",
+    ".github/jactionlint.yaml",
   )
   check = "jactionlint"
 }

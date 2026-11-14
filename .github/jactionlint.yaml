@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/jdx/jactionlint/main/schema/jactionlint-config.json
+ignores:
+  - rule: dangerous-triggers
+    file: .github/workflows/opencode.yml
+    reason: >-
+      issue_comment and pull_request_review_comment are the only supported entry
+      points for OpenCode; the job runs only for OWNER, MEMBER or COLLABORATOR
+      comments, keeps GITHUB_TOKEN at contents:read, and lets the agent write
+      only through the OpenCode GitHub App token obtained via OIDC.
+    expires: "2027-05-13"
