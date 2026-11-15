@@ -37,6 +37,11 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
     setFormState({ status: "idle" });
   }
 
+  function handleSelectDay(): void {
+    setSelectedSlot(undefined);
+    setFormState({ status: "idle" });
+  }
+
   async function refreshSlots(): Promise<void> {
     if (id !== undefined) {
       await queryClient.invalidateQueries({ queryKey: slotsQuery(id).queryKey });
@@ -126,12 +131,15 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
       booking={formState}
       guestTimeZone={guestTimeZone}
       meetingType={meetingTypeSummary}
+      onSelectDay={handleSelectDay}
       onSelectSlot={handleSelectSlot}
       onSubmit={handleSubmit}
       selectedSlot={selectedSlot}
       slots={slots.slots}
       status="ready"
       timezone={slots.timezone}
+      windowEnd={slots.windowEnd}
+      windowStart={slots.windowStart}
     />
   );
 }

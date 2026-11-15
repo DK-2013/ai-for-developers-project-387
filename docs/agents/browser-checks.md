@@ -201,11 +201,15 @@ a network error and no success message.
 
 **Expected:** the URL becomes `/book/{id}`. The heading is `Выбор времени`, followed by
 `<name> · 30 мин`. The line `Время в вашем часовом поясе. Часовой пояс владельца: Europe/Moscow.`
-is shown (the zone reflects the owner config). Slots are grouped under day headings in the guest's
-browser zone, and the link `Назад к списку типов встреч` points to `/`. With the default
-configuration every start is on the 15-minute grid and fits inside `10:00`–`18:00` owner time on a
-weekday, and no start is at or before the current moment. When no slot fits the remaining window,
-the page shows `Нет свободных слотов в ближайшие 14 дней.`.
+is shown (the zone reflects the owner config). The guest sees a Monday-first calendar of the days
+that intersect the booking window: days without free starts are disabled, and every free day shows
+its share of the day's start positions as a percentage. The first day with free starts is selected
+by default and marked in the calendar; only that day's free starts are offered as buttons on the
+right, in the guest's browser zone. Choosing another free day replaces the slot list. The link
+`Назад к списку типов встреч` points to `/`. With the default configuration every start is on the
+15-minute grid and fits inside `10:00`–`18:00` owner time on a weekday, and no start is at or before
+the current moment. When no slot fits the remaining window, the page shows
+`Нет свободных слотов в ближайшие 14 дней.`.
 
 The owner's zone fixes the grid; only the display follows the browser zone. To check the display
 zone, compare a slot's rendered time with the same instant in the browser's zone: changing the

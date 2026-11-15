@@ -52,7 +52,7 @@ describe("booking page", () => {
     expect(markup).toContain("понедельник, 5 января");
   });
 
-  it("groups slots into guest-local calendar days", () => {
+  it("shows only the selected guest-local day's slots", () => {
     const markup = renderPage(
       slotList([
         { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
@@ -62,7 +62,8 @@ describe("booking page", () => {
 
     expect(markup).toContain("понедельник, 5 января");
     expect(markup).toContain("вторник, 6 января");
-    expect(markup).toContain("01:00");
+    expect(markup).toContain("16:00");
+    expect(markup).not.toContain("01:00");
   });
 
   it("shows an empty state when the window has no free slots", () => {

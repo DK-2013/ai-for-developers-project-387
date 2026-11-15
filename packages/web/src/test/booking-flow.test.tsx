@@ -27,6 +27,8 @@ function renderView(overrides: Partial<ReadyProps> = {}): string {
     meetingType: { name: "Знакомство", durationMinutes: 15 },
     timezone: "Europe/Moscow",
     guestTimeZone: "Asia/Tokyo",
+    windowStart: new Date("2026-01-05T00:00:00Z"),
+    windowEnd: new Date("2026-01-19T00:00:00Z"),
     slots,
     booking: { status: "idle" },
     onSelectSlot: () => {},
@@ -49,6 +51,26 @@ describe("booking flow", () => {
     expect(markup).toContain("16:15");
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).not.toContain('name="attendeeName"');
+  });
+
+  it("opens the first available day and shows every day's free share", () => {
+    const markup = renderView({
+      guestTimeZone: "UTC",
+      slots: [
+        { startAt: new Date("2026-01-05T10:00:00Z"), endAt: new Date("2026-01-05T10:30:00Z") },
+        { startAt: new Date("2026-01-05T10:30:00Z"), endAt: new Date("2026-01-05T11:00:00Z") },
+        { startAt: new Date("2026-01-06T10:00:00Z"), endAt: new Date("2026-01-06T10:30:00Z") },
+        { startAt: new Date("2026-01-06T10:30:00Z"), endAt: new Date("2026-01-06T11:00:00Z") },
+        { startAt: new Date("2026-01-06T11:00:00Z"), endAt: new Date("2026-01-06T11:30:00Z") },
+        { startAt: new Date("2026-01-06T11:30:00Z"), endAt: new Date("2026-01-06T12:00:00Z") },
+      ],
+    });
+
+    expect(markup).toContain("50%");
+    expect(markup).toContain("100%");
+    expect(markup).toContain("10:00");
+    expect(markup).toContain("10:30");
+    expect(markup).not.toContain("11:00");
   });
 
   it("shows the name and email form for the selected slot", () => {
