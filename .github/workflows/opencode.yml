@@ -34,6 +34,7 @@ jobs:
       # Exchanged through OIDC for an OpenCode GitHub App token. That token
       # writes comments and branches, so GITHUB_TOKEN itself stays read-only.
       id-token: write
+      issues: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,6 +46,7 @@ jobs:
         uses: anomalyco/opencode/github@17b79f4e0c16dcff200b0417567ed22aeb2d7166 # github-v1.2.28
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: opencode/big-pickle
           mentions: /opencode,/oc
