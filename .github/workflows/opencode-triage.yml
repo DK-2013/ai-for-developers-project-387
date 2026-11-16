@@ -1,0 +1,89 @@
+name: opencode-triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opencode-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Exchanged through OIDC for an OpenCode GitHub App token. That token
+      # may comment on the issue, so GITHUB_TOKEN itself stays read-only.
+      id-token: write
+    steps:
+      - name: Decide whether to triage
+        id: gate
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const issue = context.payload.issue
+            const author = issue.user || {}
+            if (author.type === "Bot" || !author.login) {
+              core.setOutput("should-run", "false")
+              return
+            }
+
+            const skip = new Set([
+              "needs-triage",
+              "needs-info",
+              "ready-for-agent",
+              "ready-for-human",
+              "wontfix",
+            ])
+            const labels = (issue.labels || [])
+              .map((label) => (typeof label === "string" ? label : label.name || ""))
+            if (labels.some((name) => skip.has(name) || name.startsWith("wayfinder:"))) {
+              core.setOutput("should-run", "false")
+              return
+            }
+
+            const user = await github.rest.users.getByUsername({
+              username: author.login,
+            })
+            const created = new Date(user.data.created_at)
+            const days = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)
+            core.setOutput("should-run", days >= 30 ? "true" : "false")
+          result-encoding: string
+
+      - name: Check out repository
+        if: steps.gate.outputs.should-run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run OpenCode triage
+        if: steps.gate.outputs.should-run == 'true'
+        uses: anomalyco/opencode/github@17b79f4e0c16dcff200b0417567ed22aeb2d7166 # github-v1.2.28
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/big-pickle
+          share: false
+          prompt: |
+            You are triaging a newly opened GitHub issue in this repository.
+            Read the issue and relevant repository context before answering.
+            Use docs/agents/issue-tracker.md and docs/agents/triage-labels.md for
+            tracker conventions and triage labels. If helpful, use
+            .agents/skills/triage/SKILL.md as guidance, but do not perform the
+            full interactive triage workflow.
+
+            Your task is only to explain the issue:
+            - Summarize what is being reported or requested.
+            - If there is a clear fix, relevant documentation, or specific code
+              locations to check, include them with concrete references.
+            - If the issue is unclear or you cannot provide a useful explanation,
+              do not comment.
+
+            Do not edit files, create branches, open pull requests, add or remove
+            labels, or close the issue.
