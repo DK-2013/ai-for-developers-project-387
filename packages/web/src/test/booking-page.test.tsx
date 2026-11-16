@@ -11,11 +11,15 @@ const meetingTypes: MeetingTypeList = {
   meetingTypes: [{ id: "intro", name: "Знакомство", durationMinutes: 30 }],
 };
 
-function slotList(slots: SlotList["slots"]): SlotList {
+function slotList(
+  slots: SlotList["slots"],
+  windowStart = new Date("2026-01-04T21:00:00Z"),
+  windowEnd = new Date("2026-01-18T21:00:00Z"),
+): SlotList {
   return {
     timezone: "Europe/Moscow",
-    windowStart: new Date("2026-01-04T21:00:00Z"),
-    windowEnd: new Date("2026-01-18T21:00:00Z"),
+    windowStart,
+    windowEnd,
     slots,
   };
 }
@@ -35,34 +39,46 @@ function renderPage(slots: SlotList, guestTimeZone: string = "Asia/Tokyo"): stri
 }
 
 describe("booking page", () => {
-  it("shows slots in the guest browser zone and the owner zone as reference", () => {
+  it("shows week day grid for the window and selects the first day with slots", () => {
     const markup = renderPage(
-      slotList([
-        { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
-        { startAt: new Date("2026-01-05T10:00:00Z"), endAt: new Date("2026-01-05T10:30:00Z") },
-      ]),
+      slotList(
+        [
+          { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
+          { startAt: new Date("2026-01-05T10:00:00Z"), endAt: new Date("2026-01-05T10:30:00Z") },
+        ],
+        new Date("2026-01-04T21:00:00Z"),
+        new Date("2026-01-07T21:00:00Z"),
+      ),
     );
 
+    expect(markup).toContain("Дни окна бронирования");
+    expect(markup).toContain("Пн");
+    expect(markup).toContain("Вс");
     expect(markup).toContain("Выбор времени");
     expect(markup).toContain("Знакомство");
     expect(markup).toContain("30 мин");
     expect(markup).toContain("Europe/Moscow");
-    expect(markup).toContain("16:00");
-    expect(markup).toContain("19:00");
-    expect(markup).toContain("понедельник, 5 января");
+    expect(markup).toContain('data-testid="day-2026-01-05"');
+    expect(markup).toContain('data-testid="day-2026-01-06"');
+    expect(markup).toContain('aria-pressed="true"');
   });
 
-  it("groups slots into guest-local calendar days", () => {
+  it("shows only selected day slots and its heading", () => {
     const markup = renderPage(
-      slotList([
-        { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
-        { startAt: new Date("2026-01-05T16:00:00Z"), endAt: new Date("2026-01-05T16:30:00Z") },
-      ]),
+      slotList(
+        [
+          { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
+          { startAt: new Date("2026-01-06T07:00:00Z"), endAt: new Date("2026-01-06T07:30:00Z") },
+        ],
+        new Date("2026-01-04T21:00:00Z"),
+        new Date("2026-01-07T21:00:00Z"),
+      ),
     );
 
     expect(markup).toContain("понедельник, 5 января");
-    expect(markup).toContain("вторник, 6 января");
-    expect(markup).toContain("01:00");
+    expect(markup).toContain("16:00");
+    expect(markup).not.toContain("вторник, 6 января");
+    expect(markup).not.toContain('data-testid="slot-2026-01-06T07:00:00.000Z"');
   });
 
   it("shows an empty state when the window has no free slots", () => {

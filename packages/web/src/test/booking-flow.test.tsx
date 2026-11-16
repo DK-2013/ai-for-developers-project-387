@@ -7,6 +7,7 @@ import { BookingSlotsView, type BookingSlotsViewProps } from "../components/book
 const slots: Slot[] = [
   { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:15:00Z") },
   { startAt: new Date("2026-01-05T07:15:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
+  { startAt: new Date("2026-01-06T07:00:00Z"), endAt: new Date("2026-01-06T07:15:00Z") },
 ];
 
 const booking: Booking = {
@@ -27,9 +28,13 @@ function renderView(overrides: Partial<ReadyProps> = {}): string {
     meetingType: { name: "Знакомство", durationMinutes: 15 },
     timezone: "Europe/Moscow",
     guestTimeZone: "Asia/Tokyo",
+    windowStart: new Date("2026-01-04T21:00:00Z"),
+    windowEnd: new Date("2026-01-07T21:00:00Z"),
     slots,
+    selectedDayKey: "2026-01-05",
     booking: { status: "idle" },
     onSelectSlot: () => {},
+    onSelectDay: () => {},
     onSubmit: () => {},
     ...overrides,
   };
@@ -42,12 +47,13 @@ function renderView(overrides: Partial<ReadyProps> = {}): string {
 }
 
 describe("booking flow", () => {
-  it("offers free slots as selectable buttons before a slot is chosen", () => {
+  it("shows only selected day slots as selectable buttons before a slot is chosen", () => {
     const markup = renderView();
 
+    expect(markup).toContain("понедельник, 5 января");
     expect(markup).toContain("16:00");
     expect(markup).toContain("16:15");
-    expect(markup).toContain('aria-pressed="false"');
+    expect(markup).not.toContain('data-testid="slot-2026-01-06T07:00:00.000Z"');
     expect(markup).not.toContain('name="attendeeName"');
   });
 
@@ -73,7 +79,7 @@ describe("booking flow", () => {
     expect(markup).toContain("Бронирование...");
   });
 
-  it("shows a clear conflict message", () => {
+  it("shows a clear conflict message for the selected day", () => {
     const markup = renderView({
       booking: {
         status: "error",
@@ -86,7 +92,7 @@ describe("booking flow", () => {
     expect(markup).toContain("16:00");
   });
 
-  it("shows the successful booking instead of the form", () => {
+  it("shows the successful booking instead of the day/slot picker", () => {
     const markup = renderView({ booking: { status: "success", booking } });
 
     expect(markup).toContain("Вы записаны");
@@ -96,11 +102,11 @@ describe("booking flow", () => {
     expect(markup).toContain("guest@example.com");
     expect(markup).toContain("Часовой пояс владельца: Europe/Moscow");
     expect(markup).not.toContain('name="attendeeName"');
-    expect(markup).not.toContain('aria-pressed="false"');
+    expect(markup).not.toContain("Дни окна бронирования");
   });
 
   it("shows the owner time zone reference when there are no free slots", () => {
-    const markup = renderView({ slots: [] });
+    const markup = renderView({ slots: [], selectedDayKey: undefined });
 
     expect(markup).toContain("Нет свободных слотов в ближайшие 14 дней.");
     expect(markup).toContain("Часовой пояс владельца: Europe/Moscow");
