@@ -1,7 +1,13 @@
 import type { Booking, MeetingType, Slot } from "@calendar/sdk";
 import type { FormEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { formatSlotDay, formatSlotTime, groupSlotsByDay } from "../lib/slots";
+import {
+  formatSlotDay,
+  formatSlotTime,
+  WEEKDAY_LABELS,
+  type BookingCalendar,
+  type BookingDay,
+} from "../lib/slots";
 
 type MeetingTypeSummary = Pick<MeetingType, "name" | "durationMinutes">;
 
@@ -19,7 +25,9 @@ export type BookingSlotsViewProps =
       meetingType?: MeetingTypeSummary;
       timezone: string;
       guestTimeZone: string;
-      slots: readonly Slot[];
+      calendar: BookingCalendar;
+      selectedDayKey?: string;
+      onSelectDay?: (dayKey: string) => void;
       selectedSlot?: Slot;
       onSelectSlot?: (slot: Slot) => void;
       booking: BookingFormState;
@@ -117,6 +125,125 @@ function TimeZoneReference({ timezone }: { timezone: string }) {
   );
 }
 
+function DayButton({
+  day,
+  selected,
+  onSelectDay,
+}: {
+  day: BookingDay;
+  selected: boolean;
+  onSelectDay?: (dayKey: string) => void;
+}) {
+  const available = day.slots.length > 0;
+  const className = selected
+    ? "flex min-h-12 w-full flex-col items-center justify-center rounded-md border border-border bg-muted px-1 py-1 text-xs font-semibold"
+    : "flex min-h-12 w-full flex-col items-center justify-center rounded-md border border-border px-1 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background";
+
+  return (
+    <button
+      aria-label={day.heading}
+      aria-pressed={available ? selected : undefined}
+      className={className}
+      disabled={!available}
+      onClick={() => onSelectDay?.(day.key)}
+      type="button"
+    >
+      <span className="block">{day.weekday}</span>
+      <span className="block">{day.dateLabel}</span>
+    </button>
+  );
+}
+
+function DayGrid({
+  calendar,
+  selectedDayKey,
+  onSelectDay,
+}: {
+  calendar: BookingCalendar;
+  selectedDayKey?: string;
+  onSelectDay?: (dayKey: string) => void;
+}) {
+  return (
+    <table aria-label="Дни окна бронирования" className="w-full table-fixed border-collapse">
+      <caption className="sr-only">Дни окна бронирования</caption>
+      <thead>
+        <tr>
+          {WEEKDAY_LABELS.map((label) => (
+            <th
+              className="pb-1 text-center text-xs font-medium text-muted-foreground"
+              key={label}
+              scope="col"
+            >
+              {label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {calendar.weeks.map((week) => (
+          <tr key={week.key}>
+            {week.days.map((day, index) => (
+              <td className="p-0.5" key={day?.key ?? `${week.key}-${index}`}>
+                {day !== undefined ? (
+                  <DayButton
+                    day={day}
+                    onSelectDay={onSelectDay}
+                    selected={day.key === selectedDayKey}
+                  />
+                ) : null}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SelectedDaySlots({
+  day,
+  guestTimeZone,
+  selectedSlot,
+  onSelectSlot,
+}: {
+  day?: BookingDay;
+  guestTimeZone: string;
+  selectedSlot?: Slot;
+  onSelectSlot?: (slot: Slot) => void;
+}) {
+  if (day === undefined || day.slots.length === 0) {
+    return <p className="text-muted-foreground">Нет свободных слотов в ближайшие 14 дней.</p>;
+  }
+
+  return (
+    <section aria-label="Слоты выбранного дня">
+      <h2 className="text-lg font-semibold capitalize">{day.heading}</h2>
+      <ul className="mt-2 flex flex-wrap gap-2">
+        {day.slots.map((slot) => {
+          const selected = selectedSlot?.startAt.getTime() === slot.startAt.getTime();
+
+          return (
+            <li key={slot.startAt.toISOString()}>
+              <button
+                aria-pressed={selected}
+                className={
+                  selected
+                    ? "rounded-md border border-border bg-muted px-3 py-2 text-sm"
+                    : "rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+                }
+                onClick={() => onSelectSlot?.(slot)}
+                type="button"
+              >
+                {formatSlotTime(slot.startAt, guestTimeZone)}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { status: "ready" }> }) {
   if (props.booking.status === "success") {
     return (
@@ -127,7 +254,9 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
     );
   }
 
-  const groups = groupSlotsByDay(props.slots, props.guestTimeZone);
+  const selectedDay =
+    props.calendar.days.find((day) => day.key === props.selectedDayKey) ??
+    props.calendar.days.find((day) => day.slots.length > 0);
 
   return (
     <div className="mt-6 space-y-6">
@@ -137,45 +266,29 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
           {props.booking.message}
         </p>
       ) : null}
-      {props.selectedSlot ? (
-        <BookingForm
-          guestTimeZone={props.guestTimeZone}
-          onSubmit={props.onSubmit}
-          slot={props.selectedSlot}
-          state={props.booking}
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:items-start">
+        <DayGrid
+          calendar={props.calendar}
+          onSelectDay={props.onSelectDay}
+          selectedDayKey={selectedDay?.key}
         />
-      ) : null}
-      {groups.length === 0 ? (
-        <p className="text-muted-foreground">Нет свободных слотов в ближайшие 14 дней.</p>
-      ) : (
-        groups.map((group) => (
-          <section key={group.key}>
-            <h2 className="text-lg font-semibold capitalize">{group.heading}</h2>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {group.slots.map((slot) => {
-                const selected = props.selectedSlot?.startAt.getTime() === slot.startAt.getTime();
-
-                return (
-                  <li key={slot.startAt.toISOString()}>
-                    <button
-                      aria-pressed={selected}
-                      className={
-                        selected
-                          ? "rounded-md border border-border bg-muted px-3 py-2 text-sm"
-                          : "rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
-                      }
-                      onClick={() => props.onSelectSlot?.(slot)}
-                      type="button"
-                    >
-                      {formatSlotTime(slot.startAt, props.guestTimeZone)}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))
-      )}
+        <div>
+          <SelectedDaySlots
+            day={selectedDay}
+            guestTimeZone={props.guestTimeZone}
+            onSelectSlot={props.onSelectSlot}
+            selectedSlot={props.selectedSlot}
+          />
+          {props.selectedSlot ? (
+            <BookingForm
+              guestTimeZone={props.guestTimeZone}
+              onSubmit={props.onSubmit}
+              slot={props.selectedSlot}
+              state={props.booking}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

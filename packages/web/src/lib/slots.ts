@@ -1,10 +1,25 @@
 import type { Slot } from "@calendar/sdk";
 
-type SlotDayGroup = {
+export type BookingDay = {
   key: string;
+  weekday: string;
+  dateLabel: string;
   heading: string;
   slots: Slot[];
 };
+
+export type BookingWeek = {
+  key: string;
+  days: readonly (BookingDay | undefined)[];
+};
+
+export type BookingCalendar = {
+  days: readonly BookingDay[];
+  weeks: readonly BookingWeek[];
+};
+
+export const WEEKDAY_LABELS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] as const;
+const DAYS_IN_WEEK = 7;
 
 const dateKeyFormat = (timeZone: string): Intl.DateTimeFormat =>
   new Intl.DateTimeFormat("en-CA", {
@@ -22,6 +37,12 @@ const dayFormat = (timeZone: string): Intl.DateTimeFormat =>
     month: "long",
   });
 
+const shortDateFormat = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "short",
+});
+
 const timeFormat = (timeZone: string): Intl.DateTimeFormat =>
   new Intl.DateTimeFormat("ru-RU", {
     timeZone,
@@ -30,48 +51,120 @@ const timeFormat = (timeZone: string): Intl.DateTimeFormat =>
     hourCycle: "h23",
   });
 
-function dateKey(date: Date, format: Intl.DateTimeFormat): string {
-  const parts = format.formatToParts(date);
-  const value = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((part) => part.type === type)?.value ?? "";
+function part(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
+  return parts.find((item) => item.type === type)?.value ?? "";
+}
 
-  return `${value("year")}-${value("month")}-${value("day")}`;
+/** The guest-local calendar day key (`YYYY-MM-DD`) for an instant. */
+export function dayKey(date: Date, timeZone: string): string {
+  const parts = dateKeyFormat(timeZone).formatToParts(date);
+
+  return `${part(parts, "year")}-${part(parts, "month")}-${part(parts, "day")}`;
+}
+
+function keyToUtcDate(key: string): Date {
+  const [year, month, day] = key.split("-").map(Number);
+
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new Error(`Invalid day key: ${key}`);
+  }
+
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function addDays(key: string, days: number): string {
+  const date = keyToUtcDate(key);
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return [
+    String(date.getUTCFullYear()).padStart(4, "0"),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function weekdayIndex(key: string): number {
+  return (keyToUtcDate(key).getUTCDay() + 6) % DAYS_IN_WEEK;
+}
+
+function dateLabel(key: string): string {
+  const parts = shortDateFormat.formatToParts(keyToUtcDate(key));
+  const month = part(parts, "month").replace(/\.$/, "");
+
+  return `${part(parts, "day")} ${month}`;
+}
+
+function dayHeading(key: string): string {
+  return dayFormat("UTC").format(keyToUtcDate(key));
 }
 
 /**
- * Groups slots by the guest's calendar day. The owner's zone fixes the grid;
- * only the displayed day and time follow the guest's zone.
+ * Builds the guest-facing day calendar for the booking window. Days come from
+ * the window's instants in the guest zone; days without free slots stay in the
+ * calendar but carry an empty slot list. Weeks always run Monday to Sunday, and
+ * cells outside the window stay undefined.
  */
-export function groupSlotsByDay(slots: readonly Slot[], timeZone: string): SlotDayGroup[] {
-  const keyFormat = dateKeyFormat(timeZone);
-  const headingFormat = dayFormat(timeZone);
-  const groups = new Map<string, Slot[]>();
+export function buildBookingCalendar(
+  slots: readonly Slot[],
+  windowStart: Date,
+  windowEnd: Date,
+  timeZone: string,
+): BookingCalendar {
+  const keys = new Set<string>();
+  const endKey = dayKey(windowEnd, timeZone);
+
+  for (let key = dayKey(windowStart, timeZone); key < endKey; key = addDays(key, 1)) {
+    keys.add(key);
+  }
+
+  const slotsByDay = new Map<string, Slot[]>();
 
   for (const slot of slots) {
-    const key = dateKey(slot.startAt, keyFormat);
-    const group = groups.get(key);
+    const key = dayKey(slot.startAt, timeZone);
+    keys.add(key);
 
-    if (group === undefined) {
-      groups.set(key, [slot]);
+    const daySlots = slotsByDay.get(key);
+
+    if (daySlots === undefined) {
+      slotsByDay.set(key, [slot]);
     } else {
-      group.push(slot);
+      daySlots.push(slot);
     }
   }
 
-  return [...groups.entries()]
-    .toSorted(([left], [right]) => left.localeCompare(right))
-    .map(([key, groupSlots]) => {
-      const sorted = groupSlots.toSorted(
-        (left, right) => left.startAt.getTime() - right.startAt.getTime(),
-      );
-      const first = sorted.at(0);
+  const days = [...keys]
+    .toSorted((left, right) => left.localeCompare(right))
+    .map((key) => {
+      const daySlots = slotsByDay.get(key) ?? [];
+      const index = weekdayIndex(key);
 
-      if (first === undefined) {
-        throw new Error("Group slots: empty group");
-      }
-
-      return { key, heading: headingFormat.format(first.startAt), slots: sorted };
+      return {
+        key,
+        weekday: WEEKDAY_LABELS[index] ?? "",
+        dateLabel: dateLabel(key),
+        heading: dayHeading(key),
+        slots: daySlots.toSorted((left, right) => left.startAt.getTime() - right.startAt.getTime()),
+      };
     });
+
+  const weeks = new Map<string, (BookingDay | undefined)[]>();
+
+  for (const day of days) {
+    const index = weekdayIndex(day.key);
+    const mondayKey = addDays(day.key, -index);
+    const week =
+      weeks.get(mondayKey) ?? Array<BookingDay | undefined>(DAYS_IN_WEEK).fill(undefined);
+
+    week[index] = day;
+    weeks.set(mondayKey, week);
+  }
+
+  return {
+    days,
+    weeks: [...weeks.entries()]
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([key, weekDays]) => ({ key, days: weekDays })),
+  };
 }
 
 /** Formats a slot's start in the guest's browser time zone. */

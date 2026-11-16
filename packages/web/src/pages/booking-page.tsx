@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { bookingsQuery, createBooking, meetingTypesQuery, slotsQuery } from "../api/queries";
 import { BookingSlotsView, type BookingFormState } from "../components/booking-slots-view";
-import { detectBrowserTimeZone } from "../lib/slots";
+import { buildBookingCalendar, dayKey, detectBrowserTimeZone } from "../lib/slots";
 
 const CONFLICT_MESSAGE = "Это время уже занято. Пожалуйста, выберите другой слот.";
 const INVALID_MESSAGE = "Проверьте имя и e-mail: сервер отклонил запрос.";
@@ -17,6 +17,7 @@ type BookingPageProps = {
 export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: BookingPageProps = {}) {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const [requestedDayKey, setRequestedDayKey] = useState<string>();
   const [selectedSlot, setSelectedSlot] = useState<Slot>();
   const [formState, setFormState] = useState<BookingFormState>({ status: "idle" });
   const meetingTypesResult = useQuery(meetingTypesQuery);
@@ -31,6 +32,37 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
     meetingType === undefined
       ? undefined
       : { name: meetingType.name, durationMinutes: meetingType.durationMinutes };
+  const slotsData = slotsResult.data;
+  const slotList = slotsData === undefined || !("slots" in slotsData) ? undefined : slotsData;
+  const calendar =
+    slotList === undefined
+      ? undefined
+      : buildBookingCalendar(
+          slotList.slots,
+          slotList.windowStart,
+          slotList.windowEnd,
+          guestTimeZone,
+        );
+  const selectedDayKey =
+    calendar?.days.find((day) => day.key === requestedDayKey && day.slots.length > 0)?.key ??
+    calendar?.days.find((day) => day.slots.length > 0)?.key;
+  const selectedSlotDayKey =
+    selectedSlot === undefined ? undefined : dayKey(selectedSlot.startAt, guestTimeZone);
+  const activeSelectedSlot = selectedSlotDayKey === selectedDayKey ? selectedSlot : undefined;
+  const activeFormState =
+    selectedSlot === undefined || activeSelectedSlot === selectedSlot
+      ? formState
+      : { status: "idle" as const };
+
+  function handleSelectDay(key: string): void {
+    if (key === selectedDayKey) {
+      return;
+    }
+
+    setRequestedDayKey(key);
+    setSelectedSlot(undefined);
+    setFormState({ status: "idle" });
+  }
 
   function handleSelectSlot(slot: Slot): void {
     setSelectedSlot(slot);
@@ -109,9 +141,7 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
     return <BookingSlotsView status="error" message="Тип встречи не найден." />;
   }
 
-  const slots = slotsResult.data;
-
-  if (slots === undefined || !("slots" in slots)) {
+  if (calendar === undefined || slotList === undefined) {
     return (
       <BookingSlotsView
         status="error"
@@ -123,15 +153,17 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
 
   return (
     <BookingSlotsView
-      booking={formState}
+      booking={activeFormState}
+      calendar={calendar}
       guestTimeZone={guestTimeZone}
       meetingType={meetingTypeSummary}
+      onSelectDay={handleSelectDay}
       onSelectSlot={handleSelectSlot}
       onSubmit={handleSubmit}
-      selectedSlot={selectedSlot}
-      slots={slots.slots}
+      selectedDayKey={selectedDayKey}
+      selectedSlot={activeSelectedSlot}
       status="ready"
-      timezone={slots.timezone}
+      timezone={slotList.timezone}
     />
   );
 }

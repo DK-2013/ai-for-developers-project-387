@@ -195,17 +195,30 @@ a network error and no success message.
 **SPEC:** checkpoint `Гость видит список типов встреч без регистрации` in
 [Checkpoints](../SPEC.md#checkpoints).
 
-### 7. Guest booking page: slots, window, and time zones
+### 7. Guest booking page: day grid, slots, window, and time zones
 
-**Action:** click the created type card and wait for the slot grid.
+**Action:** click the created type card and wait for the day grid and slot list.
 
 **Expected:** the URL becomes `/book/{id}`. The heading is `Выбор времени`, followed by
 `<name> · 30 мин`. The line `Время в вашем часовом поясе. Часовой пояс владельца: Europe/Moscow.`
-is shown (the zone reflects the owner config). Slots are grouped under day headings in the guest's
-browser zone, and the link `Назад к списку типов встреч` points to `/`. With the default
-configuration every start is on the 15-minute grid and fits inside `10:00`–`18:00` owner time on a
-weekday, and no start is at or before the current moment. When no slot fits the remaining window,
-the page shows `Нет свободных слотов в ближайшие 14 дней.`.
+is shown (the zone reflects the owner config). The link `Назад к списку типов встреч` points to
+`/`.
+
+The day panel is to the left of the slots on wide screens and above them on narrow screens, with no
+horizontal scrolling. Days are grouped into Monday–Sunday rows under the labels `пн`, `вт`, `ср`,
+`чт`, `пт`, `сб`, `вс`. Each day cell shows its short weekday and a date with the month (`5 янв`),
+so dates on either side of a month boundary are unambiguous. Cells before the first and after the
+last day of the window are empty and inactive; days without free slots are disabled. The first day
+with free slots is selected by default. The right side shows that day's heading (for example
+`понедельник, 5 января`) and only its start times.
+
+Select another day and confirm the heading and the offered times change, the previously selected
+slot is no longer marked, the name and e-mail form disappears, and any stale conflict message is
+cleared. Every day in the window is reachable, including the day on the other side of a month
+boundary, and the selected day never points at a day missing from refreshed slot data. With the
+default configuration every start is on the 15-minute grid and fits inside `10:00`–`18:00` owner
+time on a weekday, and no start is at or before the current moment. When no slot fits the remaining
+window, the page shows `Нет свободных слотов в ближайшие 14 дней.`.
 
 The owner's zone fixes the grid; only the display follows the browser zone. To check the display
 zone, compare a slot's rendered time with the same instant in the browser's zone: changing the
@@ -382,7 +395,7 @@ Step 3: PASS — seeded type and GET /api/meeting-types 200
 Step 4: PASS — owner cabinet tabs, upcoming list, meeting-type list
 Step 5: PASS — modal open/close, POST /api/meeting-types 201, confirmation
 Step 6: PASS — created type card
-Step 7: PASS — slot grid, owner zone reference, 14-day window
+Step 7: PASS — weekly day grid, day switch reset, owner zone reference, 14-day window
 Step 8: PASS — POST /api/bookings 201, success state
 Step 9: PASS — conflict message on 409
 Step 10: PASS — partial overlap 409, back-to-back 201

@@ -11,11 +11,15 @@ const meetingTypes: MeetingTypeList = {
   meetingTypes: [{ id: "intro", name: "Знакомство", durationMinutes: 30 }],
 };
 
-function slotList(slots: SlotList["slots"]): SlotList {
+function slotList(
+  slots: SlotList["slots"],
+  windowStart: Date = new Date("2026-01-04T21:00:00Z"),
+  windowEnd: Date = new Date("2026-01-18T21:00:00Z"),
+): SlotList {
   return {
     timezone: "Europe/Moscow",
-    windowStart: new Date("2026-01-04T21:00:00Z"),
-    windowEnd: new Date("2026-01-18T21:00:00Z"),
+    windowStart,
+    windowEnd,
     slots,
   };
 }
@@ -52,7 +56,7 @@ describe("booking page", () => {
     expect(markup).toContain("понедельник, 5 января");
   });
 
-  it("groups slots into guest-local calendar days", () => {
+  it("renders the weekly day grid and shows only the first available day's slots", () => {
     const markup = renderPage(
       slotList([
         { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
@@ -60,9 +64,44 @@ describe("booking page", () => {
       ]),
     );
 
+    expect(markup).toContain("Дни окна бронирования");
+    expect(markup).toContain("пн");
+    expect(markup).toContain("вс");
     expect(markup).toContain("понедельник, 5 января");
     expect(markup).toContain("вторник, 6 января");
+    expect(markup).toContain("16:00");
+    expect(markup).not.toContain(">01:00<");
+  });
+
+  it("selects the first day that has slots", () => {
+    const markup = renderPage(
+      slotList([
+        { startAt: new Date("2026-01-05T16:00:00Z"), endAt: new Date("2026-01-05T16:30:00Z") },
+      ]),
+    );
+
+    expect(markup).toContain("вторник, 6 января");
     expect(markup).toContain("01:00");
+    expect(markup).toContain('aria-label="понедельник, 5 января"');
+    expect(markup).toContain("disabled");
+  });
+
+  it("renders unambiguous dates across a month boundary", () => {
+    const markup = renderPage(
+      slotList(
+        [
+          { startAt: new Date("2026-01-31T10:00:00Z"), endAt: new Date("2026-01-31T10:30:00Z") },
+          { startAt: new Date("2026-02-01T10:00:00Z"), endAt: new Date("2026-02-01T10:30:00Z") },
+        ],
+        new Date("2026-01-25T21:00:00Z"),
+        new Date("2026-02-08T21:00:00Z"),
+      ),
+      "Europe/Moscow",
+    );
+
+    expect(markup).toContain("31 янв");
+    expect(markup).toContain("1 февр");
+    expect(markup).toContain("суббота, 31 января");
   });
 
   it("shows an empty state when the window has no free slots", () => {

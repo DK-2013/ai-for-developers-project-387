@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { BookingSlotsView, type BookingSlotsViewProps } from "../components/booking-slots-view";
+import { buildBookingCalendar } from "../lib/slots";
 
 const slots: Slot[] = [
   { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:15:00Z") },
@@ -19,16 +20,21 @@ const booking: Booking = {
   attendeeEmail: "guest@example.com",
 };
 
+const guestTimeZone = "Asia/Tokyo";
+const windowStart = new Date("2026-01-04T21:00:00Z");
+const windowEnd = new Date("2026-01-18T21:00:00Z");
+
 type ReadyProps = Extract<BookingSlotsViewProps, { status: "ready" }>;
 
-function renderView(overrides: Partial<ReadyProps> = {}): string {
+function renderView(overrides: Partial<ReadyProps> = {}, daySlots: Slot[] = slots): string {
   const props: ReadyProps = {
     status: "ready",
     meetingType: { name: "Знакомство", durationMinutes: 15 },
     timezone: "Europe/Moscow",
-    guestTimeZone: "Asia/Tokyo",
-    slots,
+    guestTimeZone,
+    calendar: buildBookingCalendar(daySlots, windowStart, windowEnd, guestTimeZone),
     booking: { status: "idle" },
+    onSelectDay: () => {},
     onSelectSlot: () => {},
     onSubmit: () => {},
     ...overrides,
@@ -49,6 +55,39 @@ describe("booking flow", () => {
     expect(markup).toContain("16:15");
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).not.toContain('name="attendeeName"');
+  });
+
+  it("shows all window days in Monday-Sunday weeks and disables days without slots", () => {
+    const markup = renderView();
+
+    expect(markup).toContain("Дни окна бронирования");
+    expect(markup).toContain("пн");
+    expect(markup).toContain("вс");
+    expect(markup).toContain("понедельник, 5 января");
+    expect(markup).toContain("воскресенье, 18 января");
+    expect(markup).toContain("5 янв");
+    expect(markup).toContain("18 янв");
+    expect(markup).toContain('aria-label="суббота, 10 января"');
+    expect(markup).toContain('aria-label="воскресенье, 11 января"');
+    expect(markup).toContain("disabled");
+  });
+
+  it("shows only the times of the selected day", () => {
+    const nextDaySlot: Slot = {
+      startAt: new Date("2026-01-05T16:00:00Z"),
+      endAt: new Date("2026-01-05T16:15:00Z"),
+    };
+    const withNextDay = renderView({ selectedDayKey: "2026-01-06" }, [...slots, nextDaySlot]);
+
+    expect(withNextDay).toContain("вторник, 6 января");
+    expect(withNextDay).toContain("01:00");
+    expect(withNextDay).not.toContain(">16:15<");
+
+    const defaultDay = renderView({}, [...slots, nextDaySlot]);
+
+    expect(defaultDay).toContain("понедельник, 5 января");
+    expect(defaultDay).toContain("16:15");
+    expect(defaultDay).not.toContain(">01:00<");
   });
 
   it("shows the name and email form for the selected slot", () => {
@@ -100,7 +139,7 @@ describe("booking flow", () => {
   });
 
   it("shows the owner time zone reference when there are no free slots", () => {
-    const markup = renderView({ slots: [] });
+    const markup = renderView({}, []);
 
     expect(markup).toContain("Нет свободных слотов в ближайшие 14 дней.");
     expect(markup).toContain("Часовой пояс владельца: Europe/Moscow");
