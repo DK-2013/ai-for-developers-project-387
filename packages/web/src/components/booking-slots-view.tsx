@@ -19,6 +19,8 @@ export type BookingSlotsViewProps =
       meetingType?: MeetingTypeSummary;
       timezone: string;
       guestTimeZone: string;
+      windowStart: Date;
+      windowEnd: Date;
       slots: readonly Slot[];
       selectedSlot?: Slot;
       onSelectSlot?: (slot: Slot) => void;

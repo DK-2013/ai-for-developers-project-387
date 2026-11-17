@@ -132,6 +132,8 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
       slots={slots.slots}
       status="ready"
       timezone={slots.timezone}
+      windowStart={slots.windowStart}
+      windowEnd={slots.windowEnd}
     />
   );
 }
