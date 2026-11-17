@@ -61,8 +61,9 @@ describe("booking page", () => {
     );
 
     expect(markup).toContain("понедельник, 5 января");
-    expect(markup).toContain("вторник, 6 января");
-    expect(markup).toContain("01:00");
+    expect(markup).toContain('aria-label="Выбрать пн, 5 января"');
+    expect(markup).toContain('aria-label="Выбрать вт, 6 января"');
+    expect(markup).not.toContain("01:00");
   });
 
   it("shows an empty state when the window has no free slots", () => {
