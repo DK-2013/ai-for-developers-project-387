@@ -1,6 +1,6 @@
 import type { Slot } from "@calendar/sdk";
 import { describe, expect, it } from "vitest";
-import { formatSlotTime, groupSlotsByDay } from "../lib/slots";
+import { formatSlotTime, guestDayKey, groupSlotsByDay } from "../lib/slots";
 
 function slot(startAt: string, minutes: number): Slot {
   const start = new Date(startAt);
@@ -43,5 +43,12 @@ describe("guest slot formatting", () => {
 
     expect(formatSlotTime(date, "Asia/Tokyo")).toBe("16:00");
     expect(formatSlotTime(date, "Europe/Moscow")).toBe("10:00");
+  });
+
+  it("builds the guest-local calendar day key for an instant", () => {
+    const date = new Date("2026-01-05T07:00:00Z");
+
+    expect(guestDayKey(date, "Asia/Tokyo")).toBe("2026-01-05");
+    expect(guestDayKey(date, "Europe/Moscow")).toBe("2026-01-05");
   });
 });

@@ -1,7 +1,12 @@
 import type { Booking, MeetingType, Slot } from "@calendar/sdk";
 import type { FormEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { formatSlotDay, formatSlotTime, groupSlotsByDay } from "../lib/slots";
+import {
+  buildBookingCalendar,
+  formatSlotDay,
+  formatSlotTime,
+  resolveActiveDay,
+} from "../lib/slots";
 
 type MeetingTypeSummary = Pick<MeetingType, "name" | "durationMinutes">;
 
@@ -111,6 +116,8 @@ function BookingForm({
   );
 }
 
+const weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
 function TimeZoneReference({ timezone }: { timezone: string }) {
   return (
     <p className="text-sm text-muted-foreground">
@@ -129,7 +136,17 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
     );
   }
 
-  const groups = groupSlotsByDay(props.slots, props.guestTimeZone);
+  const calendar = buildBookingCalendar(
+    props.windowStart,
+    props.windowEnd,
+    props.slots,
+    props.guestTimeZone,
+  );
+  const activeDay = resolveActiveDay(calendar, {
+    guestTimeZone: props.guestTimeZone,
+    selectedSlot: props.selectedSlot,
+  });
+  const activeStart = activeDay?.slots.at(0)?.startAt;
 
   return (
     <div className="mt-6 space-y-6">
@@ -139,44 +156,93 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
           {props.booking.message}
         </p>
       ) : null}
-      {props.selectedSlot ? (
-        <BookingForm
-          guestTimeZone={props.guestTimeZone}
-          onSubmit={props.onSubmit}
-          slot={props.selectedSlot}
-          state={props.booking}
-        />
-      ) : null}
-      {groups.length === 0 ? (
+      {activeDay === undefined || activeStart === undefined ? (
         <p className="text-muted-foreground">Нет свободных слотов в ближайшие 14 дней.</p>
       ) : (
-        groups.map((group) => (
-          <section key={group.key}>
-            <h2 className="text-lg font-semibold capitalize">{group.heading}</h2>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {group.slots.map((slot) => {
-                const selected = props.selectedSlot?.startAt.getTime() === slot.startAt.getTime();
+        <>
+          <p className="text-sm font-medium capitalize">{calendar.months.join(" + ")}</p>
+          <div className="grid items-start gap-6 md:grid-cols-[auto_1fr]">
+            <nav aria-label="Дни бронирования">
+              <div className="grid grid-cols-7 text-center text-xs text-muted-foreground">
+                {weekdays.map((weekday) => (
+                  <span key={weekday}>{weekday}</span>
+                ))}
+              </div>
+              {calendar.weeks.map((week, weekIndex) => (
+                <div className="mt-1 grid grid-cols-7 text-center text-sm" key={weekIndex}>
+                  {week.map((day, dayIndex) => {
+                    const cellKey = `${weekIndex}-${dayIndex}`;
 
-                return (
-                  <li key={slot.startAt.toISOString()}>
-                    <button
-                      aria-pressed={selected}
-                      className={
-                        selected
-                          ? "rounded-md border border-border bg-muted px-3 py-2 text-sm"
-                          : "rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
-                      }
-                      onClick={() => props.onSelectSlot?.(slot)}
-                      type="button"
-                    >
-                      {formatSlotTime(slot.startAt, props.guestTimeZone)}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))
+                    if (day === null) {
+                      return <span aria-hidden="true" className="py-1" key={cellKey} />;
+                    }
+
+                    if (day.slots.length === 0) {
+                      return (
+                        <span className="py-1 text-muted-foreground" key={cellKey}>
+                          {day.dayNumber}
+                        </span>
+                      );
+                    }
+
+                    const active = day.key === activeDay.key;
+
+                    return (
+                      <button
+                        aria-label={`Выбрать ${day.label}`}
+                        aria-pressed={active}
+                        className={
+                          active
+                            ? "justify-self-center rounded-md bg-muted px-2 py-1"
+                            : "justify-self-center rounded-md px-2 py-1 hover:bg-muted"
+                        }
+                        key={cellKey}
+                        type="button"
+                      >
+                        {day.dayNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </nav>
+            <section aria-label="Свободные слоты">
+              <h2 className="text-lg font-semibold capitalize">
+                {formatSlotDay(activeStart, props.guestTimeZone)}
+              </h2>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {activeDay.slots.map((slot) => {
+                  const selected = props.selectedSlot?.startAt.getTime() === slot.startAt.getTime();
+
+                  return (
+                    <li key={slot.startAt.toISOString()}>
+                      <button
+                        aria-pressed={selected}
+                        className={
+                          selected
+                            ? "rounded-md border border-border bg-muted px-3 py-2 text-sm"
+                            : "rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+                        }
+                        onClick={() => props.onSelectSlot?.(slot)}
+                        type="button"
+                      >
+                        {formatSlotTime(slot.startAt, props.guestTimeZone)}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {props.selectedSlot ? (
+                <BookingForm
+                  guestTimeZone={props.guestTimeZone}
+                  onSubmit={props.onSubmit}
+                  slot={props.selectedSlot}
+                  state={props.booking}
+                />
+              ) : null}
+            </section>
+          </div>
+        </>
       )}
     </div>
   );
