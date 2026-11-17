@@ -28,7 +28,9 @@ export type BookingSlotsViewProps =
       windowEnd: Date;
       slots: readonly Slot[];
       selectedSlot?: Slot;
+      selectedDayKey?: string;
       onSelectSlot?: (slot: Slot) => void;
+      onSelectDay?: (dayKey: string) => void;
       booking: BookingFormState;
       onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
     };
@@ -144,6 +146,7 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
   );
   const activeDay = resolveActiveDay(calendar, {
     guestTimeZone: props.guestTimeZone,
+    selectedDayKey: props.selectedDayKey,
     selectedSlot: props.selectedSlot,
   });
   const activeStart = activeDay?.slots.at(0)?.startAt;
@@ -197,6 +200,7 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
                             : "justify-self-center rounded-md px-2 py-1 hover:bg-muted"
                         }
                         key={cellKey}
+                        onClick={() => props.onSelectDay?.(day.key)}
                         type="button"
                       >
                         {day.dayNumber}

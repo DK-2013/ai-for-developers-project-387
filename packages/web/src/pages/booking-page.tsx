@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { bookingsQuery, createBooking, meetingTypesQuery, slotsQuery } from "../api/queries";
 import { BookingSlotsView, type BookingFormState } from "../components/booking-slots-view";
-import { detectBrowserTimeZone } from "../lib/slots";
+import { detectBrowserTimeZone, guestDayKey } from "../lib/slots";
 
 const CONFLICT_MESSAGE = "Это время уже занято. Пожалуйста, выберите другой слот.";
 const INVALID_MESSAGE = "Проверьте имя и e-mail: сервер отклонил запрос.";
@@ -18,6 +18,7 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [selectedSlot, setSelectedSlot] = useState<Slot>();
+  const [selectedDayKey, setSelectedDayKey] = useState<string>();
   const [formState, setFormState] = useState<BookingFormState>({ status: "idle" });
   const meetingTypesResult = useQuery(meetingTypesQuery);
   const slotsResult = useQuery({
@@ -35,6 +36,15 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
   function handleSelectSlot(slot: Slot): void {
     setSelectedSlot(slot);
     setFormState({ status: "idle" });
+  }
+
+  function handleSelectDay(dayKey: string): void {
+    if (selectedSlot !== undefined && guestDayKey(selectedSlot.startAt, guestTimeZone) !== dayKey) {
+      setSelectedSlot(undefined);
+      setFormState({ status: "idle" });
+    }
+
+    setSelectedDayKey(dayKey);
   }
 
   async function refreshSlots(): Promise<void> {
@@ -126,8 +136,10 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
       booking={formState}
       guestTimeZone={guestTimeZone}
       meetingType={meetingTypeSummary}
+      onSelectDay={handleSelectDay}
       onSelectSlot={handleSelectSlot}
       onSubmit={handleSubmit}
+      selectedDayKey={selectedDayKey}
       selectedSlot={selectedSlot}
       slots={slots.slots}
       status="ready"

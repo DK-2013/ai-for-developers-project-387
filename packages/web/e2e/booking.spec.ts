@@ -26,6 +26,24 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   const slot = page.getByRole("button", { name: /^\d{2}:\d{2}$/ }).first();
   await expect(slot).toBeVisible();
   await slot.click();
+  await expect(page.locator('[name="attendeeName"]')).toBeVisible();
+
+  const oldSlotElement = await slot.elementHandle();
+  const slotsSection = page.getByRole("region", { name: "Свободные слоты" });
+  const activeDayBefore = await slotsSection.getByRole("heading").textContent();
+
+  await page
+    .getByRole("button", { name: /^Выбрать / })
+    .nth(1)
+    .click();
+
+  await expect(page.locator('[name="attendeeName"]')).toHaveCount(0);
+  await expect(slotsSection.getByRole("heading")).not.toHaveText(activeDayBefore ?? "");
+  expect(await oldSlotElement?.evaluate((element) => element.isConnected)).toBe(false);
+
+  const otherDaySlot = page.getByRole("button", { name: /^\d{2}:\d{2}$/ }).first();
+  await otherDaySlot.click();
+  await expect(page.locator('[name="attendeeName"]')).toBeVisible();
 
   await page.getByRole("textbox", { name: "Имя" }).fill(attendeeName);
   await page.getByRole("textbox", { name: "E-mail" }).fill(attendeeEmail);
