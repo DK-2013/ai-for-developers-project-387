@@ -9,6 +9,17 @@ const slots: Slot[] = [
   { startAt: new Date("2026-01-05T07:15:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
 ];
 
+const wednesdaySlot: Slot = {
+  startAt: new Date("2026-01-07T10:00:00Z"),
+  endAt: new Date("2026-01-07T10:15:00Z"),
+};
+
+function dayButtonPattern(label: string, pressed: boolean): RegExp {
+  return new RegExp(
+    `<button(?=[^>]*aria-label="Выбрать ${label}")(?=[^>]*aria-pressed="${pressed}")[^>]*>`,
+  );
+}
+
 const booking: Booking = {
   id: "00000000-0000-4000-8000-000000000010",
   meetingTypeId: "00000000-0000-4000-8000-000000000001",
@@ -114,16 +125,15 @@ describe("booking flow", () => {
 
   it("shows a Monday-start week with one month header and only the active day's slots", () => {
     const markup = renderView({
-      slots: [
-        ...slots,
-        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
-      ],
+      slots: [...slots, wednesdaySlot],
     });
 
     for (const weekday of ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]) {
       expect(markup).toContain(`<span>${weekday}</span>`);
     }
-    expect(markup.match(/январь/g)).toHaveLength(1);
+    const januaryMatches = markup.match(/январь/g);
+
+    expect(januaryMatches).toHaveLength(1);
     expect(markup).toContain('aria-label="Выбрать пн, 5 января"');
     expect(markup).toContain('aria-label="Выбрать ср, 7 января"');
     expect(markup).toContain("16:00");
@@ -156,19 +166,19 @@ describe("booking flow", () => {
       ],
     });
 
+    const januaryMatches = markup.match(/январь/g);
+    const februaryMatches = markup.match(/февраль/g);
+
     expect(markup).toContain("январь + февраль");
-    expect(markup.match(/январь/g)).toHaveLength(1);
-    expect(markup.match(/февраль/g)).toHaveLength(1);
+    expect(januaryMatches).toHaveLength(1);
+    expect(februaryMatches).toHaveLength(1);
     expect(markup).toContain('aria-label="Выбрать вт, 27 января"');
     expect(markup).toContain(">9</span>");
   });
 
   it("shows a day without slots in the calendar but not as a clickable day", () => {
     const markup = renderView({
-      slots: [
-        ...slots,
-        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
-      ],
+      slots: [...slots, wednesdaySlot],
     });
 
     expect(markup).toContain(">6</span>");
@@ -180,60 +190,69 @@ describe("booking flow", () => {
 
   it("marks only the active day button as pressed", () => {
     const markup = renderView({
-      slots: [
-        ...slots,
-        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
-      ],
+      slots: [...slots, wednesdaySlot],
     });
 
-    expect(markup).toMatch(
-      /<button(?=[^>]*aria-label="Выбрать пн, 5 января")(?=[^>]*aria-pressed="true")[^>]*>/,
-    );
-    expect(markup).toMatch(
-      /<button(?=[^>]*aria-label="Выбрать ср, 7 января")(?=[^>]*aria-pressed="false")[^>]*>/,
-    );
-    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+    const mondayPressed = dayButtonPattern("пн, 5 января", true);
+    const wednesdayNotPressed = dayButtonPattern("ср, 7 января", false);
+    const pressedDays = markup.match(/aria-pressed="true"/g);
+
+    expect(markup).toMatch(mondayPressed);
+    expect(markup).toMatch(wednesdayNotPressed);
+    expect(pressedDays).toHaveLength(1);
   });
 
   it("shows the slots of the explicitly selected day", () => {
     const markup = renderView({
-      slots: [
-        ...slots,
-        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
-      ],
+      slots: [...slots, wednesdaySlot],
       selectedDayKey: "2026-01-07",
     });
+
+    const wednesdayPressed = dayButtonPattern("ср, 7 января", true);
+    const mondayNotPressed = dayButtonPattern("пн, 5 января", false);
 
     expect(markup).toContain("19:00");
     expect(markup).not.toContain("16:00");
     expect(markup).toContain("среда, 7 января");
-    expect(markup).toMatch(
-      /<button(?=[^>]*aria-label="Выбрать ср, 7 января")(?=[^>]*aria-pressed="true")[^>]*>/,
-    );
-    expect(markup).toMatch(
-      /<button(?=[^>]*aria-label="Выбрать пн, 5 января")(?=[^>]*aria-pressed="false")[^>]*>/,
-    );
+    expect(markup).toMatch(wednesdayPressed);
+    expect(markup).toMatch(mondayNotPressed);
   });
 
   it("keeps the selected slot's day when a different day is selected", () => {
     const markup = renderView({
-      slots: [
-        ...slots,
-        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
-      ],
+      slots: [...slots, wednesdaySlot],
       selectedSlot: slots[0],
       selectedDayKey: "2026-01-07",
     });
+
+    const mondayPressed = dayButtonPattern("пн, 5 января", true);
+    const wednesdayNotPressed = dayButtonPattern("ср, 7 января", false);
 
     expect(markup).toContain("16:00");
     expect(markup).not.toContain("19:00");
     expect(markup).toContain("понедельник, 5 января");
     expect(markup).toContain('name="attendeeName"');
-    expect(markup).toMatch(
-      /<button(?=[^>]*aria-label="Выбрать пн, 5 января")(?=[^>]*aria-pressed="true")[^>]*>/,
-    );
-    expect(markup).toMatch(
-      /<button(?=[^>]*aria-label="Выбрать ср, 7 января")(?=[^>]*aria-pressed="false")[^>]*>/,
-    );
+    expect(markup).toMatch(mondayPressed);
+    expect(markup).toMatch(wednesdayNotPressed);
+  });
+
+  it("keeps the selected slot when its own day is reselected", () => {
+    const markup = renderView({
+      slots: [...slots, wednesdaySlot],
+      selectedSlot: slots[0],
+      selectedDayKey: "2026-01-05",
+    });
+    const mondayPressed = dayButtonPattern("пн, 5 января", true);
+    const slotPressed = /<button(?=[^>]*aria-pressed="true")[^>]*>16:00<\/button>/;
+    const pressedSlots = markup.match(/aria-pressed="true"/g);
+
+    expect(markup).toContain("16:00");
+    expect(markup).toContain("16:15");
+    expect(markup).not.toContain("19:00");
+    expect(markup).toContain("понедельник, 5 января");
+    expect(markup).toContain('name="attendeeName"');
+    expect(markup).toMatch(mondayPressed);
+    expect(markup).toMatch(slotPressed);
+    expect(pressedSlots).toHaveLength(2);
   });
 });
