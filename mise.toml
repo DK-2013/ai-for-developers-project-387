@@ -28,7 +28,7 @@ linux-x64 = { asset_pattern = "lychee-x86_64-unknown-linux-musl.tar.gz" }
 
 [tasks.setup]
 description = "Start PostgreSQL, install dependencies, generate code and install hooks"
-run = "docker compose up -d --wait db && pnpm install && pnpm codegen && hk install"
+run = "docker compose up -d --wait db && pnpm install && pnpm codegen && hk install --mise"
 
 [tasks.dev]
 description = "Start the API and the web app in watch mode"
@@ -104,7 +104,7 @@ run = "hk run pre-commit --staged --check"
 
 [tasks."hooks:install"]
 description = "Install Git hooks managed by hk"
-run = "hk install"
+run = "hk install --mise"
 
 [tasks."check:links"]
 description = "Check links in Markdown files"

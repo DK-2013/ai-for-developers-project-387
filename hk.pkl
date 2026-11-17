@@ -175,6 +175,11 @@ local commitlint = new Step {
   check = "pnpm exec commitlint --edit {{commit_msg_file}}"
 }
 
+// Catches malformed messages even when the commit-msg hook was skipped or not installed.
+local commitlintRange = new Step {
+  check = "node scripts/lint-commits.mjs"
+}
+
 hooks {
   ["pre-commit"] {
     fix = true
@@ -212,6 +217,7 @@ hooks {
       ["betterleaks"] = betterleaks
       ["suppressionDates"] = suppressionDates
       ["jactionlint"] = jactionlint
+      ["commitlintRange"] = commitlintRange
     }
   }
 
@@ -232,6 +238,7 @@ hooks {
       ["betterleaks"] = betterleaks
       ["suppressionDates"] = suppressionDates
       ["jactionlint"] = jactionlint
+      ["commitlintRange"] = commitlintRange
     }
   }
 

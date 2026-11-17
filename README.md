@@ -86,6 +86,14 @@ mise run setup        # PostgreSQL, зависимости, codegen, git-hooks
 
 `mise run setup` поднимает PostgreSQL в Docker, устанавливает зависимости, генерирует код из TypeSpec и устанавливает git-hooks.
 
+Git-хуки ставятся через hk: `commit-msg` проверяет формат Conventional Commits, а `pre-push` повторяет проверку перед отправкой. Для Git 2.54+ хуки записываются в конфиг репозитория, а не в `.git/hooks`, поэтому проверить установку можно так:
+
+```bash
+git config --get-regexp '^hook\.'
+```
+
+Хуки запускаются через mise (`hk install --mise`), чтобы `pnpm` был доступен из любого окружения. Чтобы включить hk для всех репозиториев на машине, один раз выполните `hk install --global --mise`. Если хуки не установлены, сообщения коммитов всё равно проверяются в `mise run check` и `mise run verify`.
+
 ## Использование
 
 ```bash
