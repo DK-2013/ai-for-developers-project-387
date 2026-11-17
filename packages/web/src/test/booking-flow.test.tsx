@@ -177,4 +177,63 @@ describe("booking flow", () => {
     expect(markup).toContain('aria-label="Выбрать ср, 7 января"');
     expect(markup).not.toContain("19:00");
   });
+
+  it("marks only the active day button as pressed", () => {
+    const markup = renderView({
+      slots: [
+        ...slots,
+        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
+      ],
+    });
+
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Выбрать пн, 5 января")(?=[^>]*aria-pressed="true")[^>]*>/,
+    );
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Выбрать ср, 7 января")(?=[^>]*aria-pressed="false")[^>]*>/,
+    );
+    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+  });
+
+  it("shows the slots of the explicitly selected day", () => {
+    const markup = renderView({
+      slots: [
+        ...slots,
+        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
+      ],
+      selectedDayKey: "2026-01-07",
+    });
+
+    expect(markup).toContain("19:00");
+    expect(markup).not.toContain("16:00");
+    expect(markup).toContain("среда, 7 января");
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Выбрать ср, 7 января")(?=[^>]*aria-pressed="true")[^>]*>/,
+    );
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Выбрать пн, 5 января")(?=[^>]*aria-pressed="false")[^>]*>/,
+    );
+  });
+
+  it("keeps the selected slot's day when a different day is selected", () => {
+    const markup = renderView({
+      slots: [
+        ...slots,
+        { startAt: new Date("2026-01-07T10:00:00Z"), endAt: new Date("2026-01-07T10:15:00Z") },
+      ],
+      selectedSlot: slots[0],
+      selectedDayKey: "2026-01-07",
+    });
+
+    expect(markup).toContain("16:00");
+    expect(markup).not.toContain("19:00");
+    expect(markup).toContain("понедельник, 5 января");
+    expect(markup).toContain('name="attendeeName"');
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Выбрать пн, 5 января")(?=[^>]*aria-pressed="true")[^>]*>/,
+    );
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Выбрать ср, 7 января")(?=[^>]*aria-pressed="false")[^>]*>/,
+    );
+  });
 });
