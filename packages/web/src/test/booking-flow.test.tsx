@@ -27,6 +27,8 @@ function renderView(overrides: Partial<ReadyProps> = {}): string {
     meetingType: { name: "Знакомство", durationMinutes: 15 },
     timezone: "Europe/Moscow",
     guestTimeZone: "Asia/Tokyo",
+    windowStart: new Date("2026-01-04T21:00:00Z"),
+    windowEnd: new Date("2026-01-18T21:00:00Z"),
     slots,
     booking: { status: "idle" },
     onSelectSlot: () => {},
