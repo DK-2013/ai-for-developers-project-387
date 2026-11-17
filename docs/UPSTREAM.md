@@ -39,7 +39,7 @@ After the import, the only differences are `README.md` and the absent `CHANGELOG
 | `docs/adr/0004-guest-calendar-renders-in-guest-timezone.md` | guest calendar renders in the guest zone | [386#6][6], [386#17][17] |
 | `docs/adr/0005-release-versioning.md` | one release version for the whole repository | [386#10][10] |
 | `docs/adr/0006-api-server-serves-the-web-app.md` | the API server serves the built app and owns `/api` | [386#32][32] |
-| `docs/adr/0007-runtime-and-standalone-images.md` | `runtime` vs `standalone` images; embedded PostgreSQL | [386#37][37], [386#43][43] |
+| `docs/adr/0007-single-runtime-image.md` | one runtime image; database optional at startup | [386#37][37], [386#43][43] |
 | `README.md` | deploy, browser MCP, `db:clean`, data reset, release process, environment variables | [386#10][10], [386#13][13], [386#14][14], [386#15][15], [386#17][17], [386#18][18], [386#29][29], [386#32][32], [386#33][33], [386#34][34], [386#35][35], [386#36][36], [386#37][37], [386#43][43] |
 | `AGENTS.md`, `CODING_STANDARDS.md` | process rules, Definition of Done, code-level rules | [386#2][2], [386#3][3], [386#9][9], [386#16][16], [386#18][18] |
 | `docs/agents/*` | browser checks, domain docs, issue tracker, triage labels | [386#9][9], [386#13][13], [386#17][17] |

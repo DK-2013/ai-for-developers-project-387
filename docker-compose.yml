@@ -20,11 +20,10 @@ services:
       retries: 10
 
   app:
-    # Compose provides the `db` service, so build the slim stage without the
-    # embedded PostgreSQL that only the standalone image needs.
+    # The image also starts without a database so /healthz stays green, but
+    # this service supplies PostgreSQL for the API and runs migrations.
     build:
       context: .
-      target: runtime
     depends_on:
       db:
         condition: service_healthy
