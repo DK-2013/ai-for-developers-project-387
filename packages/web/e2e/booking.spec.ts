@@ -28,6 +28,12 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   await slot.click();
   await expect(page.locator('[name="attendeeName"]')).toBeVisible();
 
+  const activeDay = page.getByRole("button", { name: /^Выбрать /, pressed: true });
+  await activeDay.click();
+  await expect(page.locator('[name="attendeeName"]')).toBeVisible();
+  await expect(activeDay).toHaveAttribute("aria-pressed", "true");
+  await expect(slot).toHaveAttribute("aria-pressed", "true");
+
   const oldSlotElement = await slot.elementHandle();
   const slotsSection = page.getByRole("region", { name: "Свободные слоты" });
   const activeDayBefore = await slotsSection.getByRole("heading").textContent();

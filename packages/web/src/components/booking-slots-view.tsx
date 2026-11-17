@@ -120,6 +120,10 @@ function BookingForm({
 
 const weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
+function buttonClass(selected: boolean, base: string, size: string): string {
+  return selected ? `${base} bg-muted ${size}` : `${base} ${size} hover:bg-muted`;
+}
+
 function TimeZoneReference({ timezone }: { timezone: string }) {
   return (
     <p className="text-sm text-muted-foreground">
@@ -166,23 +170,27 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
           <p className="text-sm font-medium capitalize">{calendar.months.join(" + ")}</p>
           <div className="grid items-start gap-6 md:grid-cols-[auto_1fr]">
             <nav aria-label="Дни бронирования">
-              <div className="grid grid-cols-7 text-center text-xs text-muted-foreground">
+              <div className="grid h-8 items-center grid-cols-7 text-center text-xs text-muted-foreground">
                 {weekdays.map((weekday) => (
                   <span key={weekday}>{weekday}</span>
                 ))}
               </div>
               {calendar.weeks.map((week, weekIndex) => (
-                <div className="mt-1 grid grid-cols-7 text-center text-sm" key={weekIndex}>
+                <div className="mt-2 grid grid-cols-7 text-center text-sm" key={weekIndex}>
                   {week.map((day, dayIndex) => {
-                    const cellKey = `${weekIndex}-${dayIndex}`;
-
                     if (day === null) {
-                      return <span aria-hidden="true" className="py-1" key={cellKey} />;
+                      return (
+                        <span
+                          aria-hidden="true"
+                          className="py-1"
+                          key={`empty-${weekIndex}-${dayIndex}`}
+                        />
+                      );
                     }
 
                     if (day.slots.length === 0) {
                       return (
-                        <span className="py-1 text-muted-foreground" key={cellKey}>
+                        <span className="py-1 text-muted-foreground" key={day.key}>
                           {day.dayNumber}
                         </span>
                       );
@@ -194,12 +202,12 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
                       <button
                         aria-label={`Выбрать ${day.label}`}
                         aria-pressed={active}
-                        className={
-                          active
-                            ? "justify-self-center rounded-md bg-muted px-2 py-1"
-                            : "justify-self-center rounded-md px-2 py-1 hover:bg-muted"
-                        }
-                        key={cellKey}
+                        className={buttonClass(
+                          active,
+                          "justify-self-center rounded-md",
+                          "px-2 py-1",
+                        )}
+                        key={day.key}
                         onClick={() => props.onSelectDay?.(day.key)}
                         type="button"
                       >
@@ -211,7 +219,7 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
               ))}
             </nav>
             <section aria-label="Свободные слоты">
-              <h2 className="text-lg font-semibold capitalize">
+              <h2 className="flex h-8 items-center text-lg font-semibold capitalize">
                 {formatSlotDay(activeStart, props.guestTimeZone)}
               </h2>
               <ul className="mt-2 flex flex-wrap gap-2">
@@ -222,11 +230,11 @@ function SlotsContent({ props }: { props: Extract<BookingSlotsViewProps, { statu
                     <li key={slot.startAt.toISOString()}>
                       <button
                         aria-pressed={selected}
-                        className={
-                          selected
-                            ? "rounded-md border border-border bg-muted px-3 py-2 text-sm"
-                            : "rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
-                        }
+                        className={buttonClass(
+                          selected,
+                          "rounded-md border border-border",
+                          "px-3 py-2 text-sm",
+                        )}
                         onClick={() => props.onSelectSlot?.(slot)}
                         type="button"
                       >

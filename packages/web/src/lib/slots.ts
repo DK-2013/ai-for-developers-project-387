@@ -137,8 +137,13 @@ export function buildBookingCalendar(
   let cursor = dayFromKey(startKey);
   let currentMonth = "";
 
-  while (dateKey(cursor, utcKeyFormat) <= endKey) {
+  while (true) {
     const key = dateKey(cursor, utcKeyFormat);
+
+    if (key > endKey) {
+      break;
+    }
+
     const month = `${cursor.getUTCFullYear()}-${cursor.getUTCMonth()}`;
 
     if (month !== currentMonth) {
