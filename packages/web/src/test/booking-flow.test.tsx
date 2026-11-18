@@ -169,7 +169,7 @@ describe("booking flow", () => {
     const januaryMatches = markup.match(/январь/g);
     const februaryMatches = markup.match(/февраль/g);
 
-    expect(markup).toContain("январь + февраль");
+    expect(markup).toContain("январь / февраль");
     expect(januaryMatches).toHaveLength(1);
     expect(februaryMatches).toHaveLength(1);
     expect(markup).toContain('aria-label="Выбрать вт, 27 января"');

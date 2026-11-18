@@ -200,8 +200,9 @@ a network error and no success message.
 **Action:** click the created type card and wait for the slot grid.
 
 **Expected:** the URL becomes `/book/{id}`. The heading is `Выбор времени`, followed by
-`<name> · 30 мин`. The line `Время в вашем часовом поясе. Часовой пояс владельца: Europe/Moscow.`
-is shown (the zone reflects the owner config). Slots are grouped under day headings in the guest's
+`<name> · 30 мин`. When the guest browser zone differs from the owner zone, the line
+`Часовой пояс владельца: Europe/Moscow.` is shown (the zone reflects the owner config); when the
+zones match, no zone reference is shown. Slots are grouped under day headings in the guest's
 browser zone, and the link `Назад к списку типов встреч` points to `/`. With the default
 configuration every start is on the 15-minute grid and fits inside `10:00`–`18:00` owner time on a
 weekday, and no start is at or before the current moment. When no slot fits the remaining window,
@@ -382,7 +383,7 @@ Step 3: PASS — seeded type and GET /api/meeting-types 200
 Step 4: PASS — owner cabinet tabs, upcoming list, meeting-type list
 Step 5: PASS — modal open/close, POST /api/meeting-types 201, confirmation
 Step 6: PASS — created type card
-Step 7: PASS — slot grid, owner zone reference, 14-day window
+Step 7: PASS — slot grid, conditional owner zone reference, 14-day window
 Step 8: PASS — POST /api/bookings 201, success state
 Step 9: PASS — conflict message on 409
 Step 10: PASS — partial overlap 409, back-to-back 201

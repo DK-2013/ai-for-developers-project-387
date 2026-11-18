@@ -73,6 +73,13 @@ describe("booking page", () => {
     expect(markup).toContain("Часовой пояс владельца: Europe/Moscow");
   });
 
+  it("omits the owner zone reference when it matches the guest zone", () => {
+    const markup = renderPage(slotList([]), "Europe/Moscow");
+
+    expect(markup).toContain("Нет свободных слотов в ближайшие 14 дней.");
+    expect(markup).not.toContain("Часовой пояс владельца");
+  });
+
   it("shows the API error when slots cannot be loaded", () => {
     const queryClient = createQueryClient(meetingTypes, {
       meetingTypeId: "intro",
