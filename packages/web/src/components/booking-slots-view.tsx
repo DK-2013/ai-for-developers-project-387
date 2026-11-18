@@ -128,6 +128,34 @@ function buttonClass(selected: boolean, base: string, size: string): string {
   return selected ? `${base} bg-muted ${size}` : `${base} ${size} hover:bg-muted`;
 }
 
+function PressableButton({
+  pressed,
+  base,
+  size,
+  onPress,
+  ariaLabel,
+  children,
+}: {
+  pressed: boolean;
+  base: string;
+  size: string;
+  onPress?: () => void;
+  ariaLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      aria-label={ariaLabel}
+      aria-pressed={pressed}
+      className={buttonClass(pressed, base, size)}
+      onClick={onPress}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
 function TimeZoneReference({
   timezone,
   guestTimeZone,
@@ -172,15 +200,15 @@ function CalendarDayCell({
   }
 
   return (
-    <button
-      aria-label={`Выбрать ${day.label}`}
-      aria-pressed={active}
-      className={buttonClass(active, "justify-self-center rounded-md", "px-2 py-1")}
-      onClick={() => onSelect?.(day.key)}
-      type="button"
+    <PressableButton
+      ariaLabel={`Выбрать ${day.label}`}
+      base="justify-self-center rounded-md"
+      onPress={() => onSelect?.(day.key)}
+      pressed={active}
+      size="px-2 py-1"
     >
       {day.dayNumber}
-    </button>
+    </PressableButton>
   );
 }
 
@@ -232,14 +260,14 @@ function SlotOption({
 }) {
   return (
     <li>
-      <button
-        aria-pressed={selected}
-        className={buttonClass(selected, "rounded-md border border-border", "px-3 py-2 text-sm")}
-        onClick={() => onSelect?.(slot)}
-        type="button"
+      <PressableButton
+        base="rounded-md border border-border"
+        onPress={() => onSelect?.(slot)}
+        pressed={selected}
+        size="px-3 py-2 text-sm"
       >
         {formatSlotTime(slot.startAt, guestTimeZone)}
-      </button>
+      </PressableButton>
     </li>
   );
 }
@@ -346,8 +374,6 @@ const getBookingSlotsContent = (props: BookingSlotsViewProps) => {
       return <p className="mt-6 text-muted-foreground">{props.message}</p>;
     case "ready":
       return <SlotsContent props={props} />;
-    default:
-      return null;
   }
 };
 
