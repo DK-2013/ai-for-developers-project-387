@@ -79,13 +79,12 @@ function dayFromKey(key: string): Date {
   return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
-/**
- * Groups slots by the guest's calendar day. The owner's zone fixes the grid;
- * only the displayed day and time follow the guest's zone.
- */
-export function groupSlotsByDay(slots: readonly Slot[], timeZone: string): SlotDayGroup[] {
+function byStart(left: Slot, right: Slot): number {
+  return left.startAt.getTime() - right.startAt.getTime();
+}
+
+function groupSlotsByKey(slots: readonly Slot[], timeZone: string): Map<string, Slot[]> {
   const keyFormat = dateKeyFormat(timeZone);
-  const headingFormat = dayFormat(timeZone);
   const groups = new Map<string, Slot[]>();
 
   for (const slot of slots) {
@@ -99,12 +98,21 @@ export function groupSlotsByDay(slots: readonly Slot[], timeZone: string): SlotD
     }
   }
 
+  return groups;
+}
+
+/**
+ * Groups slots by the guest's calendar day. The owner's zone fixes the grid;
+ * only the displayed day and time follow the guest's zone.
+ */
+export function groupSlotsByDay(slots: readonly Slot[], timeZone: string): SlotDayGroup[] {
+  const headingFormat = dayFormat(timeZone);
+  const groups = groupSlotsByKey(slots, timeZone);
+
   return [...groups.entries()]
     .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([key, groupSlots]) => {
-      const sorted = groupSlots.toSorted(
-        (left, right) => left.startAt.getTime() - right.startAt.getTime(),
-      );
+      const sorted = groupSlots.toSorted(byStart);
       const first = sorted.at(0);
 
       if (first === undefined) {
@@ -128,9 +136,7 @@ export function buildBookingCalendar(
   const windowKeyFormat = dateKeyFormat(guestTimeZone);
   const startKey = dateKey(windowStart, windowKeyFormat);
   const endKey = dateKey(new Date(windowEnd.getTime() - 1), windowKeyFormat);
-  const slotsByKey = new Map(
-    groupSlotsByDay(slots, guestTimeZone).map((group) => [group.key, group.slots]),
-  );
+  const slotsByKey = groupSlotsByKey(slots, guestTimeZone);
   const months: string[] = [];
   const weeks: (BookingCalendarDay | null)[][] = [];
   let week: (BookingCalendarDay | null)[] = [];
@@ -155,7 +161,7 @@ export function buildBookingCalendar(
       key,
       dayNumber: cursor.getUTCDate(),
       label: shortDayFormat.format(cursor),
-      slots: slotsByKey.get(key) ?? [],
+      slots: (slotsByKey.get(key) ?? []).toSorted(byStart),
     };
     const weekday = (cursor.getUTCDay() + 6) % 7;
 
