@@ -202,7 +202,7 @@ opencode mcp list       # проверить состояние всех MCP-с�
 
 ### По команде в комментарии
 
-Воркфлоу `.github/workflows/opencode.yml` запускает агента OpenCode по комментарию в issue или
+Воркфлоу `.github/workflows/interactive.yml` запускает агента OpenCode по комментарию в issue или
 pull request: он разбирает задачу, предлагает изменение и, если попросить, готовит ветку или
 pull request.
 
@@ -228,7 +228,7 @@ pull request. Статус и логи запуска — на вкладке Ac
 
 ### Авто-triage новых issue
 
-Воркфлоу `.github/workflows/opencode-triage.yml` запускает первичный разбор новых issue.
+Воркфлоу `.github/workflows/triage.yml` запускает первичный разбор новых issue.
 
 - **Событие:** `issues`, только `types: [opened]`.
 - **Кто проходит фильтр:** автор — не бот, и аккаунт создан не менее 30 дней назад. Issue,
@@ -286,7 +286,7 @@ Actions, workflow `opencode-triage`.
 `OPENCODE_API_KEY` (*Settings → Secrets and variables → Actions*). Переменные репозитория:
 `OC_EDIT_MODEL` — модель для запуска по команде в комментарии, `OC_REVIEW_MODEL` — модель для
 авто-ревью PR, `OC_REVIEW_LIMIT` — число попыток ревью на один PR (по умолчанию `3`). Модель
-triage задана прямо в `opencode-triage.yml`.
+triage задана прямо в `triage.yml`.
 
 ## Релизы
 
