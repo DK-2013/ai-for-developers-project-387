@@ -14,10 +14,23 @@ const wednesdaySlot: Slot = {
   endAt: new Date("2026-01-07T10:15:00Z"),
 };
 
+const mondayLabel = "пн, 5 января, 2 свободных слота";
+const wednesdayLabel = "ср, 7 января, 1 свободный слот";
+const dayLabel = (label: string) => `aria-label="Выбрать ${label}"`;
+
 function dayButtonPattern(label: string, pressed: boolean): RegExp {
   return new RegExp(
     `<button(?=[^>]*aria-label="Выбрать ${label}")(?=[^>]*aria-pressed="${pressed}")[^>]*>`,
   );
+}
+
+function dayButtonMarkup(markup: string, label: string): string {
+  const pattern = new RegExp(
+    `<button(?=[^>]*aria-label="Выбрать ${label}(?:,|"))[^>]*>[\\s\\S]*?</button>`,
+  );
+  const match = pattern.exec(markup);
+
+  return match?.[0] ?? "";
 }
 
 const booking: Booking = {
@@ -134,8 +147,8 @@ describe("booking flow", () => {
     const januaryMatches = markup.match(/январь/g);
 
     expect(januaryMatches).toHaveLength(1);
-    expect(markup).toContain('aria-label="Выбрать пн, 5 января"');
-    expect(markup).toContain('aria-label="Выбрать ср, 7 января"');
+    expect(markup).toContain(dayLabel(mondayLabel));
+    expect(markup).toContain(dayLabel(wednesdayLabel));
     expect(markup).toContain("16:00");
     expect(markup).toContain("16:15");
     expect(markup).not.toContain("19:00");
@@ -152,8 +165,8 @@ describe("booking flow", () => {
     });
 
     expect(markup).not.toContain('aria-label="Выбрать вт, 6 января"');
-    expect(markup).not.toContain('aria-label="Выбрать пн, 5 января"');
-    expect(markup).toContain('aria-label="Выбрать ср, 7 января"');
+    expect(markup).not.toContain(dayLabel(mondayLabel));
+    expect(markup).toContain(dayLabel(wednesdayLabel));
     expect(markup).toContain("16:00");
   });
 
@@ -172,7 +185,7 @@ describe("booking flow", () => {
     expect(markup).toContain("январь / февраль");
     expect(januaryMatches).toHaveLength(1);
     expect(februaryMatches).toHaveLength(1);
-    expect(markup).toContain('aria-label="Выбрать вт, 27 января"');
+    expect(markup).toContain('aria-label="Выбрать вт, 27 января, 1 свободный слот"');
     expect(markup).toContain(">9</span>");
   });
 
@@ -183,8 +196,8 @@ describe("booking flow", () => {
 
     expect(markup).toContain(">6</span>");
     expect(markup).not.toContain('aria-label="Выбрать вт, 6 января"');
-    expect(markup).toContain('aria-label="Выбрать пн, 5 января"');
-    expect(markup).toContain('aria-label="Выбрать ср, 7 января"');
+    expect(markup).toContain(dayLabel(mondayLabel));
+    expect(markup).toContain(dayLabel(wednesdayLabel));
     expect(markup).not.toContain("19:00");
   });
 
@@ -193,8 +206,8 @@ describe("booking flow", () => {
       slots: [...slots, wednesdaySlot],
     });
 
-    const mondayPressed = dayButtonPattern("пн, 5 января", true);
-    const wednesdayNotPressed = dayButtonPattern("ср, 7 января", false);
+    const mondayPressed = dayButtonPattern(mondayLabel, true);
+    const wednesdayNotPressed = dayButtonPattern(wednesdayLabel, false);
     const pressedDays = markup.match(/aria-pressed="true"/g);
 
     expect(markup).toMatch(mondayPressed);
@@ -208,8 +221,8 @@ describe("booking flow", () => {
       selectedDayKey: "2026-01-07",
     });
 
-    const wednesdayPressed = dayButtonPattern("ср, 7 января", true);
-    const mondayNotPressed = dayButtonPattern("пн, 5 января", false);
+    const wednesdayPressed = dayButtonPattern(wednesdayLabel, true);
+    const mondayNotPressed = dayButtonPattern(mondayLabel, false);
 
     expect(markup).toContain("19:00");
     expect(markup).not.toContain("16:00");
@@ -225,8 +238,8 @@ describe("booking flow", () => {
       selectedDayKey: "2026-01-07",
     });
 
-    const mondayPressed = dayButtonPattern("пн, 5 января", true);
-    const wednesdayNotPressed = dayButtonPattern("ср, 7 января", false);
+    const mondayPressed = dayButtonPattern(mondayLabel, true);
+    const wednesdayNotPressed = dayButtonPattern(wednesdayLabel, false);
 
     expect(markup).toContain("16:00");
     expect(markup).not.toContain("19:00");
@@ -242,7 +255,7 @@ describe("booking flow", () => {
       selectedSlot: slots[0],
       selectedDayKey: "2026-01-05",
     });
-    const mondayPressed = dayButtonPattern("пн, 5 января", true);
+    const mondayPressed = dayButtonPattern(mondayLabel, true);
     const slotPressed = /<button(?=[^>]*aria-pressed="true")[^>]*>16:00<\/button>/;
     const pressedSlots = markup.match(/aria-pressed="true"/g);
 
@@ -254,5 +267,43 @@ describe("booking flow", () => {
     expect(markup).toMatch(mondayPressed);
     expect(markup).toMatch(slotPressed);
     expect(pressedSlots).toHaveLength(2);
+  });
+
+  it("announces the slot count on available days with Russian pluralization", () => {
+    const thursdaySlots = Array.from({ length: 5 }, (_, index) => ({
+      startAt: new Date(Date.UTC(2026, 0, 8, 7 + index, 0)),
+      endAt: new Date(Date.UTC(2026, 0, 8, 7 + index, 15)),
+    }));
+    const markup = renderView({ slots: [...slots, wednesdaySlot, ...thursdaySlots] });
+
+    expect(markup).toContain(dayLabel(mondayLabel));
+    expect(markup).toContain(dayLabel(wednesdayLabel));
+    expect(markup).toContain('aria-label="Выбрать чт, 8 января, 5 свободных слотов"');
+  });
+
+  it("shows a slot bar only on days with slots that are not selected", () => {
+    const markup = renderView({ slots: [...slots, wednesdaySlot] });
+    const selectedMarkup = renderView({
+      slots: [...slots, wednesdaySlot],
+      selectedDayKey: "2026-01-07",
+    });
+
+    const mondayButton = dayButtonMarkup(markup, mondayLabel);
+    const wednesdayButton = dayButtonMarkup(markup, wednesdayLabel);
+    const selectedMondayButton = dayButtonMarkup(selectedMarkup, mondayLabel);
+    const selectedWednesdayButton = dayButtonMarkup(selectedMarkup, wednesdayLabel);
+
+    expect(mondayButton).not.toContain("data-slot-bar");
+    expect(wednesdayButton).toContain("data-slot-bar");
+    expect(selectedMondayButton).toContain("data-slot-bar");
+    expect(selectedWednesdayButton).not.toContain("data-slot-bar");
+  });
+
+  it("announces a day without slots as unavailable without making it focusable", () => {
+    const markup = renderView({ slots: [...slots, wednesdaySlot] });
+
+    expect(markup).toContain("вт, 6 января: нет слотов");
+    expect(markup).not.toContain('aria-label="Выбрать вт, 6 января"');
+    expect(markup).not.toContain("tabindex");
   });
 });
