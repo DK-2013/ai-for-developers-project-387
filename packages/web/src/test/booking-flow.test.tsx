@@ -304,6 +304,13 @@ describe("booking flow", () => {
 
     expect(markup).toContain("вт, 6 января: нет слотов");
     expect(markup).not.toContain('aria-label="Выбрать вт, 6 января"');
-    expect(markup).not.toContain("tabindex");
+
+    const unavailableDayCell = markup.match(
+      /<(\w+)([^>]*class="py-1 text-muted-foreground"[^>]*)>[\s\S]*?вт, 6 января: нет слотов/,
+    );
+
+    expect(unavailableDayCell?.[1]).toBe("span");
+    expect(unavailableDayCell?.[2]).not.toContain("tabindex");
+    expect(unavailableDayCell?.[2]).not.toContain("role=");
   });
 });
