@@ -11,7 +11,7 @@ jobs:
       !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.pull_request.user.login == github.repository_owner ||
        github.event.pull_request.user.login == 'opencode-agent[bot]')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       issues: read
@@ -96,7 +96,7 @@ jobs:
       - name: Review with OpenCode CLI
         id: agent
         if: steps.budget.outputs.allowed == 'true'
-        timeout-minutes: 4
+        timeout-minutes: 6
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OC_REVIEW_MODEL: ${{ vars.OC_REVIEW_MODEL }}
@@ -117,7 +117,7 @@ jobs:
             fail infra
           fi
           set +e
-          timeout -k 10s 180s opencode run --print-logs --log-level INFO --model "$OC_REVIEW_MODEL" --variant high --agent plan --format json \
+          timeout -k 10s 300s opencode run --print-logs --log-level INFO --model "$OC_REVIEW_MODEL" --variant high --agent plan --format json \
             "Проведи ревью PR #$PR_NUMBER в репозитории $GITHUB_REPOSITORY.
           Прочитай AGENTS.md, REVIEW.md и docs/SPEC.md — это источники правил и формата.
           Читай PR через gh pr view и gh pr diff; при необходимости — gh pr checks, gh run view, gh issue view.
