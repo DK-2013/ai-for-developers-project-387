@@ -282,7 +282,7 @@ Actions, workflow `opencode-triage`.
 - **Права:** `contents`, `issues`, `actions`, `checks` и `statuses` — только чтение;
   `pull-requests: write` нужен для комментариев с ревью и итогом. `actions/checkout` работает с
   `persist-credentials: false`.
-- **Лимиты:** таймаут job — 10 минут; вызов модели ограничен 3 минутами после установки
+- **Лимиты:** таймаут job — 15 минут; вызов модели ограничен 5 минутами после установки
   OpenCode 1.19.6 (закреплена и проверяется по SHA-256). `concurrency` на PR: новый запуск
   отменяет предыдущий.
 
