@@ -45,6 +45,8 @@ Discover via `mise tasks` / `mise.toml` / `hk.toml`. Key gates: `mise run check`
 
 Commits: Conventional Commits, lines ≤ 100 chars, ticketed commits end with `(#N)`; linear history. Docs for users in Russian; code and agent docs in English.
 
+In the GitHub Actions edit run (`.github/workflows/interactive.yml`) commit the change yourself on the checked-out branch, with a Conventional Commits message and nothing left uncommitted. Do not create or switch branches: otherwise OpenCode commits its own summary under 40 characters, which cannot be configured and fails commitlint.
+
 ## Pointers
 
 - Browser verification checklist: `docs/agents/browser-checks.md`.
