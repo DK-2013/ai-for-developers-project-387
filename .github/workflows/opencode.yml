@@ -48,7 +48,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: ${{ vars.OC_MODEL }}
+          model: ${{ vars.OC_EDIT_MODEL }}
           mentions: /opencode,/oc
           # Public repositories share sessions by default; keep transcripts private.
           share: false
