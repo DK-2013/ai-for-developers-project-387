@@ -124,8 +124,35 @@ function BookingForm({
 
 const weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
+function slotCountLabel(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+
+  if (last === 1 && lastTwo !== 11) {
+    return `${count} свободный слот`;
+  }
+
+  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) {
+    return `${count} свободных слота`;
+  }
+
+  return `${count} свободных слотов`;
+}
+
 function buttonClass(selected: boolean, base: string, size: string): string {
   return selected ? `${base} bg-muted ${size}` : `${base} ${size} hover:bg-muted`;
+}
+
+function SlotBar({ count, maxCount }: { count: number; maxCount: number }) {
+  const segments = Math.max(1, Math.round((5 * count) / maxCount));
+
+  return (
+    <span aria-hidden="true" className="mt-0.5 flex justify-center gap-0.5" data-slot-bar="">
+      {Array.from({ length: segments }, (_, index) => (
+        <span className="h-1 w-1 rounded-full bg-foreground" key={index} />
+      ))}
+    </span>
+  );
 }
 
 function PressableButton({
@@ -185,10 +212,12 @@ function BookingError({ state }: { state: BookingFormState }) {
 function CalendarDayCell({
   day,
   active,
+  maxCount,
   onSelect,
 }: {
   day: BookingCalendarDay | null;
   active: boolean;
+  maxCount: number;
   onSelect?: (dayKey: string) => void;
 }) {
   if (day === null) {
@@ -196,18 +225,26 @@ function CalendarDayCell({
   }
 
   if (day.slots.length === 0) {
-    return <span className="py-1 text-muted-foreground">{day.dayNumber}</span>;
+    return (
+      <span className="py-1 text-muted-foreground">
+        <span aria-hidden="true">{day.dayNumber}</span>
+        <span className="sr-only">{day.label}: нет слотов</span>
+      </span>
+    );
   }
 
   return (
     <PressableButton
-      ariaLabel={`Выбрать ${day.label}`}
+      ariaLabel={`Выбрать ${day.label}, ${slotCountLabel(day.slots.length)}`}
       base="justify-self-center rounded-md"
       onPress={() => onSelect?.(day.key)}
       pressed={active}
       size="px-2 py-1"
     >
-      {day.dayNumber}
+      <span className="grid justify-items-center">
+        {day.dayNumber}
+        {active ? null : <SlotBar count={day.slots.length} maxCount={maxCount} />}
+      </span>
     </PressableButton>
   );
 }
@@ -221,6 +258,10 @@ function BookingCalendarNav({
   activeDayKey: string;
   onSelectDay?: (dayKey: string) => void;
 }) {
+  const maxCount = calendar.weeks
+    .flat()
+    .reduce((max, day) => Math.max(max, day?.slots.length ?? 0), 0);
+
   return (
     <nav aria-label="Дни бронирования">
       <h2 className="flex h-8 items-center text-lg font-semibold capitalize">
@@ -238,6 +279,7 @@ function BookingCalendarNav({
               active={day?.key === activeDayKey}
               day={day}
               key={day === null ? `empty-${weekIndex}-${dayIndex}` : day.key}
+              maxCount={maxCount}
               onSelect={onSelectDay}
             />
           ))}

@@ -61,8 +61,8 @@ describe("booking page", () => {
     );
 
     expect(markup).toContain("понедельник, 5 января");
-    expect(markup).toContain('aria-label="Выбрать пн, 5 января"');
-    expect(markup).toContain('aria-label="Выбрать вт, 6 января"');
+    expect(markup).toContain('aria-label="Выбрать пн, 5 января, 1 свободный слот"');
+    expect(markup).toContain('aria-label="Выбрать вт, 6 января, 1 свободный слот"');
     expect(markup).not.toContain("01:00");
   });
 
