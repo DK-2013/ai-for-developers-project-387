@@ -4,6 +4,7 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   const meetingTypeName = `Booking ${Date.now()} ${Math.random().toString(16).slice(2)}`;
   const attendeeName = "Гость E2E";
   const attendeeEmail = "guest-e2e@example.com";
+  const description = "Уточнить график\nПрислать документы";
 
   const createResponse = await request.post("/api/meeting-types", {
     data: {
@@ -51,8 +52,11 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   await otherDaySlot.click();
   await expect(page.locator('[name="attendeeName"]')).toBeVisible();
 
+  const descriptionField = page.getByLabel("Описание (необязательно)");
+  await expect(descriptionField).toHaveAttribute("maxlength", "2000");
   await page.getByRole("textbox", { name: "Имя" }).fill(attendeeName);
   await page.getByRole("textbox", { name: "E-mail" }).fill(attendeeEmail);
+  await descriptionField.fill(description);
 
   const bookingResponse = page.waitForResponse(
     (response) =>
@@ -60,10 +64,16 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   );
   await page.getByRole("button", { name: "Забронировать" }).click();
 
-  expect((await bookingResponse).status()).toBe(201);
+  const response = await bookingResponse;
+  expect(response.status()).toBe(201);
+
+  const postData = response.request().postData() ?? "{}";
+  const requestBody = JSON.parse(postData) as { description?: string };
+  expect(requestBody.description).toBe(description);
 
   const confirmation = page.getByRole("region", { name: "Подтверждение бронирования" });
   await expect(confirmation.getByRole("heading", { name: "Вы записаны" })).toBeVisible();
   await expect(confirmation.getByText(`${attendeeName}, ${attendeeEmail}`)).toBeVisible();
   await expect(confirmation.getByText(new RegExp(`^${meetingTypeName} · `))).toBeVisible();
+  await expect(confirmation).toContainText(description);
 });
