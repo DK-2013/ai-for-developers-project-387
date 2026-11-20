@@ -62,15 +62,37 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # The composite action pins a ref but installs the latest OpenCode
+      # release. Pin the version so the triage run keeps its read-only behavior.
+      - name: Install OpenCode
+        if: steps.gate.outputs.should-run == 'true'
+        timeout-minutes: 3
+        env:
+          OPENCODE_VERSION: 1.19.6
+          OPENCODE_SHA256: 47734e08968b30cc22a0bffb6d9feeed76ad4aa743213a12122040392d09a057
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/opencode.tar.gz"
+          curl -fsSLo "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"
+          echo "${OPENCODE_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$HOME/.opencode/bin"
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
       - name: Run OpenCode triage
         if: steps.gate.outputs.should-run == 'true'
-        uses: anomalyco/opencode/github@17b79f4e0c16dcff200b0417567ed22aeb2d7166 # github-v1.2.28
+        timeout-minutes: 10
         env:
+          MODEL: opencode/big-pickle
+          SHARE: "false"
+          USE_GITHUB_TOKEN: "false"
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-        with:
-          model: opencode/big-pickle
-          share: false
-          prompt: |
+          # Triage only explains the issue. Deny edits and shell so the working
+          # tree cannot become dirty; otherwise OpenCode commits its own
+          # sub-40-character summary, which fails commitlint.
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"deny"}}'
+          PROMPT: |
             You are triaging a newly opened GitHub issue in this repository.
             Read the issue and relevant repository context before answering.
             Use docs/agents/issue-tracker.md and docs/agents/triage-labels.md for
@@ -87,3 +109,4 @@ jobs:
 
             Do not edit files, create branches, open pull requests, add or remove
             labels, or close the issue.
+        run: opencode github run

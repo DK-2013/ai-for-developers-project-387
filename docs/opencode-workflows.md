@@ -70,7 +70,14 @@ pull request. Статус и логи запуска — на вкладке Ac
   `ready-for-agent`, `ready-for-human`, `wontfix` или любой лейбл с префиксом `wayfinder:`,
   повторный разбор не запускается.
 - **Модель:** `opencode/big-pickle` — задана прямо в workflow; ключ — секрет `OPENCODE_API_KEY`.
-- **Share:** `share: false` — сессии не публикуются.
+- **Share:** `SHARE: "false"` — сессии не публикуются.
+- **Версия:** OpenCode 1.19.6 ставится в workflow с проверкой SHA-256. Версия закреплена, потому
+  что composite action `anomalyco/opencode/github` ставил бы последнюю 1.x, а от версии зависит
+  поведение `opencode github run`.
+- **Только чтение:** `OPENCODE_PERMISSION` запрещает `edit` и `bash`. Поэтому агент не может
+  изменить рабочее дерево, и `opencode github run` не создаёт коммит и pull request. Инструкция
+  в prompt — не единственная защита: собственное сообщение OpenCode короче 40 символов не
+  проходит `commitlint`.
 - **Права:** `GITHUB_TOKEN` только на чтение (`contents: read`), плюс `id-token: write` для
   обмена OIDC на токен OpenCode GitHub App. `actions/checkout` работает с
   `persist-credentials: false`.
@@ -81,8 +88,8 @@ pull request. Статус и логи запуска — на вкладке Ac
 оставляет комментарий с кратким разбором, а при наличии — с очевидным направлением фикса,
 ссылками на документацию или места в коде. Если понятного объяснения нет, комментарий не создаётся.
 В этом запуске агент не меняет файлы, не создаёт ветки и pull request,
-не меняет лейблы и не закрывает issue. Статус и логи — на вкладке
-Actions, workflow `opencode-triage`.
+не меняет лейблы и не закрывает issue: `edit` и `bash` запрещены через `OPENCODE_PERMISSION`.
+Статус и логи — на вкладке Actions, workflow `opencode-triage`.
 
 ## Авто-ревью pull request
 
