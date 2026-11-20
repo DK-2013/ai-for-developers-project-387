@@ -17,6 +17,9 @@ function BookingItem({ booking, timeZone }: { booking: Booking; timeZone: string
       <p className="mt-2 text-sm text-muted-foreground">
         {booking.attendeeName}, {booking.attendeeEmail}
       </p>
+      {booking.description ? (
+        <p className="mt-2 whitespace-pre-line text-sm">Описание: {booking.description}</p>
+      ) : null}
     </li>
   );
 }
