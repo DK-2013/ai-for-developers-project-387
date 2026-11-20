@@ -89,6 +89,22 @@ describe("booking flow", () => {
     expect(markup).toContain("Забронировать");
   });
 
+  it("offers an optional multi-line description field", () => {
+    const markup = renderView({ selectedSlot: slots[0] });
+    const textarea = /<textarea[^>]*name="description"[^>]*>/.exec(markup)?.[0] ?? "";
+
+    expect(textarea).toContain('maxLength="2000"');
+    expect(textarea).toContain('rows="3"');
+    expect(textarea).not.toContain("required");
+    expect(markup).toContain("Описание (необязательно)");
+  });
+
+  it("shows the 2000-character limit hint next to the description field", () => {
+    const markup = renderView({ selectedSlot: slots[0] });
+
+    expect(markup).toContain("До 2000 символов");
+  });
+
   it("disables the submit button while submitting", () => {
     const markup = renderView({
       selectedSlot: slots[0],
@@ -125,6 +141,18 @@ describe("booking flow", () => {
     expect(markup).not.toContain('name="attendeeName"');
     expect(markup).not.toContain("aria-pressed");
     expect(markup).not.toContain("Выбрать ");
+    expect(markup).not.toContain("Описание:");
+  });
+
+  it("shows the submitted description with preserved line breaks in the confirmation", () => {
+    const description = "Уточнить график\nПрислать документы";
+    const markup = renderView({
+      booking: { status: "success", booking: { ...booking, description } },
+    });
+
+    expect(markup).toContain(description);
+    expect(markup).toContain('class="whitespace-pre-line');
+    expect(markup).toContain("Описание:");
   });
 
   it("shows the owner time zone reference when there are no free slots", () => {
