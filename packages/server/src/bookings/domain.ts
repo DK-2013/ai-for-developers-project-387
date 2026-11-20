@@ -6,6 +6,7 @@ export type NewBooking = {
   meetingTypeName: string;
   attendeeName: string;
   attendeeEmail: string;
+  description?: string;
   startAt: Temporal.Instant;
   endAt: Temporal.Instant;
 };
