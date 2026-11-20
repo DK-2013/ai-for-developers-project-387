@@ -32,11 +32,72 @@ jobs:
     permissions:
       contents: read
       # Exchanged through OIDC for an OpenCode GitHub App token. That token
-      # writes comments and branches, so GITHUB_TOKEN itself stays read-only.
+      # writes comments and branches, so contents on GITHUB_TOKEN stays read-only.
       id-token: write
+      # The chat budget keeps its counter in a comment on the pull request.
       issues: write
     steps:
+      # Reads the current budget counter without modifying it. Outputs:
+      # - allowed: true/false (whether the request may proceed)
+      # - used: current count (for display)
+      # The counter is NOT incremented here; that happens after checkout and
+      # install succeed, ensuring only attempts that reach the model spend budget.
+      - name: Check chat budget
+        id: budget-check
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          ON_PR: ${{ github.event.pull_request.number != null || github.event.issue.pull_request != null }}
+          LIMIT: ${{ vars.OC_CHAT_LIMIT || '3' }}
+        run: |
+          set -euo pipefail
+          case "$LIMIT" in
+            ''|*[!0-9]*)
+              echo "::error::vars.OC_CHAT_LIMIT must be a non-negative integer, got '$LIMIT'"
+              echo "allowed=false" >> "$GITHUB_OUTPUT"
+              exit 1
+              ;;
+          esac
+          if [ "$ON_PR" != "true" ]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+            echo "used=0" >> "$GITHUB_OUTPUT"
+            echo "::notice::Chat budget applies to pull requests; this issue is not budgeted"
+            exit 0
+          fi
+
+          state=$(
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+              --jq '.[]
+                    | select(.user.login == "github-actions[bot]")
+                    | select(.body | startswith("<!-- oc-chat-budget:"))
+                    | [(.id | tostring),
+                       (.body | capture("<!-- oc-chat-budget: (?<used>[0-9]+) -->").used)]
+                    | @tsv' |
+              tail -n 1
+          )
+          used=0
+          if [ -n "$state" ]; then
+            used=${state##*$'\t'}
+          fi
+
+          if [ "$used" -ge "$LIMIT" ]; then
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "used=$used" >> "$GITHUB_OUTPUT"
+            echo "::notice::Chat budget exhausted: $used of $LIMIT requests in PR #$PR_NUMBER"
+            body="Бюджет запросов к агенту в этом PR исчерпан (**$used из $LIMIT**). Модель не вызывалась."
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="$body" >/dev/null
+            exit 0
+          fi
+
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
+          echo "used=$used" >> "$GITHUB_OUTPUT"
+          echo "::notice::Chat budget: $used of $LIMIT requests in PR #$PR_NUMBER"
+
       - name: Check out repository
+        if: steps.budget-check.outputs.allowed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
@@ -46,6 +107,7 @@ jobs:
       # latest 1.x. Pin the version: the run relies on 1.19.6 pushing the commit
       # the agent made itself instead of committing its own summary.
       - name: Install OpenCode
+        if: steps.budget-check.outputs.allowed == 'true'
         timeout-minutes: 3
         env:
           OPENCODE_VERSION: 1.19.6
@@ -60,7 +122,44 @@ jobs:
           tar -xzf "$archive" -C "$HOME/.opencode/bin"
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
+      # Increments the budget counter after checkout and install succeed.
+      # This ensures only attempts that actually reach the model spend budget.
+      - name: Increment chat budget
+        id: budget-increment
+        if: steps.budget-check.outputs.allowed == 'true'
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          PREVIOUS_USED: ${{ steps.budget-check.outputs.used }}
+          LIMIT: ${{ vars.OC_CHAT_LIMIT || '3' }}
+        run: |
+          set -euo pipefail
+          used=$((PREVIOUS_USED + 1))
+          comment_id=$(
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+              --jq '.[]
+                    | select(.user.login == "github-actions[bot]")
+                    | select(.body | startswith("<!-- oc-chat-budget:"))
+                    | .id | tostring' |
+              tail -n 1
+          )
+          body=$(printf '%s\n%s' \
+            "<!-- oc-chat-budget: $used -->" \
+            "Бюджет запросов к агенту: **$used из $LIMIT**.")
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              -f body="$body" >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="$body" >/dev/null
+          fi
+          echo "used=$used" >> "$GITHUB_OUTPUT"
+          echo "::notice::Chat budget: $used of $LIMIT requests in PR #$PR_NUMBER"
+
       - name: Run OpenCode
+        if: steps.budget-increment.outputs.used != ''
         env:
           MODEL: ${{ vars.OC_EDIT_MODEL }}
           MENTIONS: /opencode,/oc
