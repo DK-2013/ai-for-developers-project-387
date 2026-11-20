@@ -29,6 +29,7 @@ export const bookings = pgTable(
     meetingTypeName: varchar("meeting_type_name", { length: 200 }).notNull(),
     attendeeName: varchar("attendee_name", { length: 200 }).notNull(),
     attendeeEmail: varchar("attendee_email", { length: 254 }).notNull(),
+    description: varchar("description", { length: 2000 }),
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
   },

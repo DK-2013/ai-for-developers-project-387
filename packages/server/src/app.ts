@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Temporal } from "temporal-polyfill";
-import type { Booking } from "./bookings/domain.js";
+import type { Booking, NewBooking } from "./bookings/domain.js";
 import { BookingConflictError, createBookingRepository } from "./bookings/repository.js";
 import { parseCreateBookingRequest } from "./bookings/validation.js";
 import type { Clock } from "./clock.js";
@@ -66,7 +66,7 @@ function toWireMeetingType(meetingType: MeetingType): WireMeetingType {
 }
 
 function toWireBooking(booking: Booking): WireBooking {
-  return {
+  const wire: WireBooking = {
     id: booking.id,
     meetingTypeId: booking.meetingTypeId,
     meetingTypeName: booking.meetingTypeName,
@@ -75,6 +75,12 @@ function toWireBooking(booking: Booking): WireBooking {
     attendeeName: booking.attendeeName,
     attendeeEmail: booking.attendeeEmail,
   };
+
+  if (booking.description !== undefined) {
+    wire.description = booking.description;
+  }
+
+  return wire;
 }
 
 export function createRequestHandler({
@@ -202,15 +208,21 @@ export function createRequestHandler({
 
       let booking: Booking;
 
+      const input: NewBooking = {
+        meetingTypeId: meetingType.id,
+        meetingTypeName: meetingType.name,
+        attendeeName: parsed.value.attendeeName,
+        attendeeEmail: parsed.value.attendeeEmail,
+        startAt: slot.start,
+        endAt: slot.end,
+      };
+
+      if (parsed.value.description !== undefined) {
+        input.description = parsed.value.description;
+      }
+
       try {
-        booking = await bookings.create({
-          meetingTypeId: meetingType.id,
-          meetingTypeName: meetingType.name,
-          attendeeName: parsed.value.attendeeName,
-          attendeeEmail: parsed.value.attendeeEmail,
-          startAt: slot.start,
-          endAt: slot.end,
-        });
+        booking = await bookings.create(input);
       } catch (error) {
         if (error instanceof BookingConflictError) {
           return {
