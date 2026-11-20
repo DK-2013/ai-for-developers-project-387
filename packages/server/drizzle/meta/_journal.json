@@ -15,6 +15,13 @@
       "when": 1793863246778,
       "tag": "0001_booking_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795199994164,
+      "tag": "0002_gifted_warpath",
+      "breakpoints": true
     }
   ]
 }

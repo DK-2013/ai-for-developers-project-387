@@ -17,7 +17,7 @@ export class BookingConflictError extends Error {
 type BookingRow = typeof bookings.$inferSelect;
 
 function toBooking(row: BookingRow): Booking {
-  return {
+  const booking: Booking = {
     id: row.id,
     meetingTypeId: row.meetingTypeId,
     meetingTypeName: row.meetingTypeName,
@@ -26,6 +26,12 @@ function toBooking(row: BookingRow): Booking {
     startAt: toInstant(row.startAt),
     endAt: toInstant(row.endAt),
   };
+
+  if (row.description !== null) {
+    booking.description = row.description;
+  }
+
+  return booking;
 }
 
 export type BookingRepository = {
@@ -42,6 +48,7 @@ export function createBookingRepository(db: Database): BookingRepository {
         meetingTypeName: input.meetingTypeName,
         attendeeName: input.attendeeName,
         attendeeEmail: input.attendeeEmail,
+        description: input.description,
         startAt: toDate(input.startAt),
         endAt: toDate(input.endAt),
       };

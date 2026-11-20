@@ -10,6 +10,7 @@ const FIXED_NOW = new Date("2026-01-05T10:00:00.000Z");
 const DEFAULT_MEETING_TYPE_ID = "00000000-0000-4000-8000-000000000001";
 const UNKNOWN_MEETING_TYPE_ID = "00000000-0000-4000-8000-000000000099";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const OVER_LIMIT_DESCRIPTION = "🔥".repeat(2001);
 
 type BookingBody = {
   id: string;
@@ -19,6 +20,7 @@ type BookingBody = {
   endAt: string;
   attendeeName: string;
   attendeeEmail: string;
+  description?: string;
 };
 
 type Response = { status: number; body: unknown };
@@ -74,11 +76,15 @@ async function withServer(
   }
 }
 
-async function createMeetingType(name: string, durationMinutes: number): Promise<string> {
+async function createMeetingType(
+  name: string,
+  durationMinutes: number,
+  description?: string,
+): Promise<string> {
   const response = await fetch(`${baseUrl}/meeting-types`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, durationMinutes }),
+    body: JSON.stringify({ name, durationMinutes, description }),
   });
   const body = (await response.json()) as { id: string };
 
@@ -148,6 +154,60 @@ describe("POST /bookings", () => {
     expect(body.id).toMatch(UUID_PATTERN);
   });
 
+  it("stores the submitted description on the booking", async () => {
+    const description = "Context for the call:\nPlease send the pricing.";
+    const response = await postBooking(bookingRequest({ description }));
+    const body = response.body as BookingBody;
+
+    expect(response.status).toBe(201);
+    expect(body.description).toBe(description);
+  });
+
+  it("does not add a description when the request omits it", async () => {
+    const response = await postBooking(bookingRequest());
+    const body = response.body as BookingBody;
+
+    expect(response.status).toBe(201);
+    expect(body.description).toBeUndefined();
+  });
+
+  it("treats an empty description as no description", async () => {
+    const response = await postBooking(bookingRequest({ description: "" }));
+    const body = response.body as BookingBody;
+
+    expect(response.status).toBe(201);
+    expect(body.description).toBeUndefined();
+  });
+
+  it("treats a whitespace-only description as no description", async () => {
+    const response = await postBooking(bookingRequest({ description: " \n\t " }));
+    const body = response.body as BookingBody;
+
+    expect(response.status).toBe(201);
+    expect(body.description).toBeUndefined();
+  });
+
+  it("accepts a description of exactly 2000 code points", async () => {
+    const description = "🔥".repeat(2000);
+    const response = await postBooking(bookingRequest({ description }));
+    const body = response.body as BookingBody;
+
+    expect(response.status).toBe(201);
+
+    const codePoints = [...(body.description ?? "")].length;
+
+    expect(codePoints).toBe(2000);
+  });
+
+  it("does not copy the meeting type description into the booking", async () => {
+    const meetingTypeId = await createMeetingType("Консультация", 30, "Owner's type description");
+    const response = await postBooking(bookingRequest({ meetingTypeId }));
+    const body = response.body as BookingBody;
+
+    expect(response.status).toBe(201);
+    expect(body.description).toBeUndefined();
+  });
+
   it.each([
     ["body that is null", null],
     ["body that is an array", []],
@@ -187,6 +247,12 @@ describe("POST /bookings", () => {
     [
       "attendeeEmail longer than 254 characters",
       bookingRequest({ attendeeEmail: `${"a".repeat(243)}@example.com` }),
+    ],
+    ["description that is not a string", bookingRequest({ description: 42 })],
+    ["description that is null", bookingRequest({ description: null })],
+    [
+      "description longer than 2000 code points",
+      bookingRequest({ description: OVER_LIMIT_DESCRIPTION }),
     ],
   ])("returns 400 for %s", async (_label, body) => {
     const response = await postBooking(body);
@@ -250,6 +316,15 @@ describe("POST /bookings", () => {
   it("returns 409 for a repeat booking of the same slot", async () => {
     const first = await postBooking(bookingRequest());
     const second = await postBooking(bookingRequest());
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({ code: "slot_not_available" });
+  });
+
+  it("returns 409 for a conflicting booking that carries a description", async () => {
+    const first = await postBooking(bookingRequest({ description: "First call context" }));
+    const second = await postBooking(bookingRequest({ description: "Second call context" }));
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(409);
@@ -384,5 +459,37 @@ describe("GET /bookings", () => {
 
     expect(response.status).toBe(200);
     expect(body.bookings).toEqual([]);
+  });
+
+  it("returns the exact submitted description on the matching booking", async () => {
+    const description = "Line one\nLine two — 🔥";
+    const described = await postBooking(
+      bookingRequest({ startAt: "2026-01-06T07:00:00Z", description }),
+    );
+    const plain = await postBooking(
+      bookingRequest({ startAt: "2026-01-06T08:00:00Z", attendeeName: "Анна" }),
+    );
+
+    expect(described.status).toBe(201);
+    expect(plain.status).toBe(201);
+
+    const response = await getBookings();
+    const body = response.body as { bookings: BookingBody[] };
+
+    expect(response.status).toBe(200);
+    expect(body.bookings).toHaveLength(2);
+    expect(body.bookings[0]).toMatchObject({ startAt: "2026-01-06T07:00:00Z", description });
+    expect(body.bookings[1].description).toBeUndefined();
+  });
+
+  it("does not return a description for whitespace-only input", async () => {
+    await postBooking(bookingRequest({ description: " \n\t " }));
+
+    const response = await getBookings();
+    const body = response.body as { bookings: BookingBody[] };
+
+    expect(response.status).toBe(200);
+    expect(body.bookings).toHaveLength(1);
+    expect(body.bookings[0].description).toBeUndefined();
   });
 });

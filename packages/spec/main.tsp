@@ -57,6 +57,8 @@ model CreateBookingRequest {
   startAt: utcDateTime;
   @maxLength(200) attendeeName: string;
   @format("email") @maxLength(254) attendeeEmail: string;
+  /** Optional guest-supplied context for the call. Blank text is treated as absent. */
+  @maxLength(2000) description?: string;
 }
 
 model Booking {
@@ -70,6 +72,9 @@ model Booking {
   endAt: utcDateTime;
   attendeeName: string;
   attendeeEmail: string;
+
+  /** Guest-supplied context captured when the booking was created. */
+  @maxLength(2000) description?: string;
 }
 
 model BookingList {
