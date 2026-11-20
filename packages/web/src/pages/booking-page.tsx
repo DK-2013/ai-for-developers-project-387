@@ -1,4 +1,4 @@
-import type { Slot } from "@calendar/sdk";
+import type { CreateBookingRequest, Slot } from "@calendar/sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
@@ -7,7 +7,7 @@ import { BookingSlotsView, type BookingFormState } from "../components/booking-s
 import { detectBrowserTimeZone, guestDayKey } from "../lib/slots";
 
 const CONFLICT_MESSAGE = "Это время уже занято. Пожалуйста, выберите другой слот.";
-const INVALID_MESSAGE = "Проверьте имя и e-mail: сервер отклонил запрос.";
+const INVALID_MESSAGE = "Проверьте имя, e-mail и описание: сервер отклонил запрос.";
 const GENERIC_ERROR_MESSAGE = "Не удалось забронировать слот. Попробуйте ещё раз.";
 
 type BookingPageProps = {
@@ -63,16 +63,24 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
     const formData = new FormData(event.currentTarget);
     const attendeeName = String(formData.get("attendeeName") ?? "").trim();
     const attendeeEmail = String(formData.get("attendeeEmail") ?? "").trim();
+    const rawDescription = String(formData.get("description") ?? "");
+    const description = rawDescription.trim() === "" ? undefined : rawDescription;
+
+    const request: CreateBookingRequest = {
+      meetingTypeId: id,
+      startAt: selectedSlot.startAt,
+      attendeeName,
+      attendeeEmail,
+    };
+
+    if (description !== undefined) {
+      request.description = description;
+    }
 
     setFormState({ status: "submitting" });
 
     try {
-      const result = await mutation.mutateAsync({
-        meetingTypeId: id,
-        startAt: selectedSlot.startAt,
-        attendeeName,
-        attendeeEmail,
-      });
+      const result = await mutation.mutateAsync(request);
 
       if ("code" in result) {
         if (result.code === "slot_not_available") {

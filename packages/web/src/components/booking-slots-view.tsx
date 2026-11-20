@@ -69,6 +69,9 @@ function SuccessContent({ booking, guestTimeZone }: { booking: Booking; guestTim
       <p className="text-sm text-muted-foreground">
         {booking.attendeeName}, {booking.attendeeEmail}
       </p>
+      {booking.description ? (
+        <p className="whitespace-pre-line text-sm">Описание: {booking.description}</p>
+      ) : null}
     </section>
   );
 }
@@ -111,6 +114,20 @@ function BookingForm({
           type="email"
         />
       </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Описание (необязательно)
+        <textarea
+          aria-describedby="booking-description-hint"
+          className="rounded-md border border-border bg-background px-3 py-2"
+          id="booking-description"
+          maxLength={2000}
+          name="description"
+          rows={3}
+        />
+      </label>
+      <span className="text-xs text-muted-foreground" id="booking-description-hint">
+        До 2000 символов
+      </span>
       <button
         className="justify-self-start rounded-md border border-border bg-background px-4 py-2 hover:bg-muted disabled:opacity-50"
         disabled={submitting}
