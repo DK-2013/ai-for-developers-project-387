@@ -293,10 +293,17 @@ describe("booking flow", () => {
     const selectedMondayButton = dayButtonMarkup(selectedMarkup, mondayLabel);
     const selectedWednesdayButton = dayButtonMarkup(selectedMarkup, wednesdayLabel);
 
+    const slotBarSpace = 'class="mt-0.5 flex h-1 justify-center gap-0.5"';
+
     expect(mondayButton).not.toContain("data-slot-bar");
     expect(wednesdayButton).toContain("data-slot-bar");
     expect(selectedMondayButton).toContain("data-slot-bar");
     expect(selectedWednesdayButton).not.toContain("data-slot-bar");
+    expect(mondayButton).toContain(slotBarSpace);
+    expect(wednesdayButton).toContain(slotBarSpace);
+    expect(selectedMondayButton).toContain(slotBarSpace);
+    expect(selectedWednesdayButton).toContain(slotBarSpace);
+    expect(wednesdayButton).toContain("bg-available");
   });
 
   it("announces a day without slots as unavailable without making it focusable", () => {

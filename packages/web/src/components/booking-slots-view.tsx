@@ -143,14 +143,28 @@ function buttonClass(selected: boolean, base: string, size: string): string {
   return selected ? `${base} bg-muted ${size}` : `${base} ${size} hover:bg-muted`;
 }
 
-function SlotBar({ count, maxCount }: { count: number; maxCount: number }) {
+function SlotBar({
+  active,
+  count,
+  maxCount,
+}: {
+  active: boolean;
+  count: number;
+  maxCount: number;
+}) {
   const segments = Math.max(1, Math.round((5 * count) / maxCount));
 
   return (
-    <span aria-hidden="true" className="mt-0.5 flex justify-center gap-0.5" data-slot-bar="">
-      {Array.from({ length: segments }, (_, index) => (
-        <span className="h-1 w-1 rounded-full bg-foreground" key={index} />
-      ))}
+    <span
+      aria-hidden="true"
+      className="mt-0.5 flex h-1 justify-center gap-0.5"
+      data-slot-bar={active ? undefined : ""}
+    >
+      {active
+        ? null
+        : Array.from({ length: segments }, (_, index) => (
+            <span className="h-1 w-1 rounded-full bg-available" key={index} />
+          ))}
     </span>
   );
 }
@@ -243,7 +257,7 @@ function CalendarDayCell({
     >
       <span className="grid justify-items-center">
         {day.dayNumber}
-        {active ? null : <SlotBar count={day.slots.length} maxCount={maxCount} />}
+        <SlotBar active={active} count={day.slots.length} maxCount={maxCount} />
       </span>
     </PressableButton>
   );
