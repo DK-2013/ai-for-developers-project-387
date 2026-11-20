@@ -10,12 +10,14 @@ type NewBookingInput = {
   startAt: Temporal.Instant;
   attendeeName: string;
   attendeeEmail: string;
+  description?: string;
 };
 
 type JsonRecord = Record<string, unknown>;
 
 const MAX_NAME_LENGTH = 200;
 const MAX_EMAIL_LENGTH = 254;
+const MAX_DESCRIPTION_LENGTH = 2000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -40,7 +42,7 @@ export function parseCreateBookingRequest(body: unknown): CreateBookingValidatio
     return invalid("request body must be a JSON object");
   }
 
-  const { meetingTypeId, startAt, attendeeName, attendeeEmail } = body;
+  const { meetingTypeId, startAt, attendeeName, attendeeEmail, description: rawDescription } = body;
 
   if (typeof meetingTypeId !== "string" || meetingTypeId.length === 0) {
     return invalid("meetingTypeId must be a non-empty string");
@@ -80,13 +82,30 @@ export function parseCreateBookingRequest(body: unknown): CreateBookingValidatio
     return invalid("attendeeEmail must be a valid email address");
   }
 
-  return {
-    ok: true,
-    value: {
-      meetingTypeId,
-      startAt: start,
-      attendeeName,
-      attendeeEmail,
-    },
-  };
+  let description: string | undefined;
+
+  if (rawDescription !== undefined) {
+    if (typeof rawDescription !== "string") {
+      return invalid("description must be a string");
+    }
+
+    const length = codePointLength(rawDescription);
+    const hasContent = rawDescription.trim().length > 0;
+
+    if (length > MAX_DESCRIPTION_LENGTH) {
+      return invalid(`description must be at most ${MAX_DESCRIPTION_LENGTH} characters`);
+    }
+
+    if (hasContent) {
+      description = rawDescription;
+    }
+  }
+
+  const value: NewBookingInput = { meetingTypeId, startAt: start, attendeeName, attendeeEmail };
+
+  if (description !== undefined) {
+    value.description = description;
+  }
+
+  return { ok: true, value };
 }

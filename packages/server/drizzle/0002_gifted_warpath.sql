@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ADD COLUMN "description" varchar(2000);
