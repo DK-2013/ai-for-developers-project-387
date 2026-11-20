@@ -39,9 +39,12 @@ jobs:
     steps:
       # Reads the current budget counter without modifying it. Outputs:
       # - allowed: true/false (whether the request may proceed)
+      # - budgeted: true/false (whether this thread uses the budget at all)
       # - used: current count (for display)
       # The counter is NOT incremented here; that happens after checkout and
       # install succeed, ensuring only attempts that reach the model spend budget.
+      # Only pull requests are budgeted, and `budgeted` is what tells the
+      # increment step to stay away from issues.
       - name: Check chat budget
         id: budget-check
         timeout-minutes: 3
@@ -60,8 +63,11 @@ jobs:
               ;;
           esac
           if [ "$ON_PR" != "true" ]; then
-            echo "allowed=true" >> "$GITHUB_OUTPUT"
-            echo "used=0" >> "$GITHUB_OUTPUT"
+            {
+              echo "allowed=true"
+              echo "budgeted=false"
+              echo "used=0"
+            } >> "$GITHUB_OUTPUT"
             echo "::notice::Chat budget applies to pull requests; this issue is not budgeted"
             exit 0
           fi
@@ -83,8 +89,11 @@ jobs:
           fi
 
           if [ "$used" -ge "$LIMIT" ]; then
-            echo "allowed=false" >> "$GITHUB_OUTPUT"
-            echo "used=$used" >> "$GITHUB_OUTPUT"
+            {
+              echo "allowed=false"
+              echo "budgeted=true"
+              echo "used=$used"
+            } >> "$GITHUB_OUTPUT"
             echo "::notice::Chat budget exhausted: $used of $LIMIT requests in PR #$PR_NUMBER"
             body="Бюджет запросов к агенту в этом PR исчерпан (**$used из $LIMIT**). Модель не вызывалась."
             gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
@@ -92,8 +101,11 @@ jobs:
             exit 0
           fi
 
-          echo "allowed=true" >> "$GITHUB_OUTPUT"
-          echo "used=$used" >> "$GITHUB_OUTPUT"
+          {
+            echo "allowed=true"
+            echo "budgeted=true"
+            echo "used=$used"
+          } >> "$GITHUB_OUTPUT"
           echo "::notice::Chat budget: $used of $LIMIT requests in PR #$PR_NUMBER"
 
       - name: Check out repository
@@ -124,9 +136,12 @@ jobs:
 
       # Increments the budget counter after checkout and install succeed.
       # This ensures only attempts that actually reach the model spend budget.
+      # Issues are not budgeted, so they must never get a counter comment.
       - name: Increment chat budget
         id: budget-increment
-        if: steps.budget-check.outputs.allowed == 'true'
+        if: >-
+          steps.budget-check.outputs.allowed == 'true' &&
+          steps.budget-check.outputs.budgeted == 'true'
         timeout-minutes: 3
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -159,7 +174,7 @@ jobs:
           echo "::notice::Chat budget: $used of $LIMIT requests in PR #$PR_NUMBER"
 
       - name: Run OpenCode
-        if: steps.budget-increment.outputs.used != ''
+        if: steps.budget-check.outputs.allowed == 'true'
         env:
           MODEL: ${{ vars.OC_EDIT_MODEL }}
           MENTIONS: /opencode,/oc
