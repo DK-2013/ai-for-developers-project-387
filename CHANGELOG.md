@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.4.0...v0.5.0) (2026-11-21)
+
+
+### Features
+
+* **web:** show slot counts in the booking calendar ([#17](https://github.com/DK-2013/ai-for-developers-project-387/issues/17)) ([64bce97](https://github.com/DK-2013/ai-for-developers-project-387/commit/64bce97c7d273b9d78557f4f8535e123e8b51cc4))
+
+
+### Bug Fixes
+
+* **ci:** count the /oc budget only on pull requests ([9c2afdd](https://github.com/DK-2013/ai-for-developers-project-387/commit/9c2afdded03092ff175d096d9053e2493dae0611))
+* **ci:** grant pull-requests write for the /oc budget comment ([105eeca](https://github.com/DK-2013/ai-for-developers-project-387/commit/105eeca64f49ba06e0cc6186db6e615b8ab4041a))
+* **ci:** keep triage read-only and pin OpenCode ([6d42f0a](https://github.com/DK-2013/ai-for-developers-project-387/commit/6d42f0a2b716204b1bc8e43bc254c4d3313216c0))
+* **ci:** publish review outcome without a git checkout ([183961f](https://github.com/DK-2013/ai-for-developers-project-387/commit/183961faa2fdd297123d6fe7a7f963861cd757f8))
+* **web:** keep day numbers stable and tint slot dots ([#17](https://github.com/DK-2013/ai-for-developers-project-387/issues/17)) ([c21481e](https://github.com/DK-2013/ai-for-developers-project-387/commit/c21481ed688a25f973dc66e2bc660914e6d0094d))
+
 ## [0.4.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.3.1...v0.4.0) (2026-11-19)
 
 
