@@ -1,9 +1,9 @@
-name: OpenCode PR Review
+name: pr-review
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 concurrency:
-  group: opencode-review-${{ github.event.pull_request.number }}
+  group: oc-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
   review:

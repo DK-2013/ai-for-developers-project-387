@@ -1,4 +1,4 @@
-name: opencode-triage
+name: triage
 
 on:
   issues:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: opencode-triage
+  group: oc-triage
   cancel-in-progress: false
 
 jobs:
