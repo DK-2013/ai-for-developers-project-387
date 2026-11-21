@@ -164,9 +164,9 @@ Chromium для Playwright и проходит сценарии из `packages/w
 
 ## Lighthouse CI
 
-Workflow `.github/workflows/lighthouse.yml` раз в сутки в 04:21 МСК (`cron` в GitHub Actions только
-в UTC, поэтому `01:21` UTC) и по `workflow_dispatch` проверяет задеплоенный сервис из переменной
-репозитория `APP_URL`. Перед замером шаг ждёт `/healthz` до 10 минут: бесплатный Render засыпает и
+Workflow `.github/workflows/lighthouse.yml` раз в сутки в 04:21 МСК (`timezone: Europe/Moscow` в
+`schedule`) и по `workflow_dispatch` проверяет задеплоенный сервис из переменной репозитория
+`APP_URL`. Перед замером шаг ждёт `/healthz` до 10 минут: бесплатный Render засыпает и
 может отвечать дольше минуты.
 
 Что мерится: четыре страницы (`/`, `/owner`, `/owner/meeting-types`, `/book/{id}`), mobile, три

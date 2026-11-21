@@ -2,8 +2,9 @@ name: lighthouse
 
 on:
   schedule:
-    # 04:21 Europe/Moscow. GitHub Actions cron is UTC-only, so 01:21 UTC.
-    - cron: "21 1 * * *"
+    # Daily at 04:21 Europe/Moscow; GitHub supports an IANA timezone here.
+    - cron: "21 4 * * *"
+      timezone: Europe/Moscow
   workflow_dispatch:
 
 permissions:
