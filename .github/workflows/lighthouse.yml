@@ -17,7 +17,7 @@ jobs:
   lighthouse:
     name: Lighthouse report
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
       # Findings are published as issues. Nothing here writes code, so the token
@@ -47,7 +47,7 @@ jobs:
       # Render sleeps on the free plan and can take minutes to answer. Without
       # --fail a 503 body exits 0, which would look like a healthy service.
       - name: Wake the Render service
-        timeout-minutes: 6
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           if [ -z "${APP_URL:-}" ]; then
@@ -57,7 +57,7 @@ jobs:
           APP_URL="${APP_URL%/}"
           echo "APP_URL=$APP_URL" >> "$GITHUB_ENV"
           started=$SECONDS
-          deadline=$((SECONDS + 300))
+          deadline=$((SECONDS + 600))
           while true; do
             body="$(curl -fsS --max-time 25 "$APP_URL/healthz" 2>/dev/null || true)"
             if [ "$(jq -r '.status // empty' <<<"$body" 2>/dev/null)" = "ok" ]; then
@@ -65,7 +65,7 @@ jobs:
               exit 0
             fi
             if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::$APP_URL did not answer /healthz with {\"status\":\"ok\"} within 300s"
+              echo "::error::$APP_URL did not answer /healthz with {\"status\":\"ok\"} within 600s"
               exit 1
             fi
             sleep 5
@@ -94,7 +94,7 @@ jobs:
             .lighthouserc.json > "$RUNNER_TEMP/lighthouserc.json"
 
       - name: Collect Lighthouse reports
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: pnpm dlx @lhci/cli@0.16.1 collect --config="$RUNNER_TEMP/lighthouserc.json"
 
       # A budget failure exits 1, and so does an infrastructure failure. They are
