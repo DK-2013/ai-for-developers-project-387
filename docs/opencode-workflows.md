@@ -134,7 +134,8 @@ pull request. Статус и логи запуска — на вкладке Ac
 
 ## Ежедневный отчёт Lighthouse
 
-Воркфлоу `.github/workflows/lighthouse.yml` раз в сутки в 04:21 МСК и по `workflow_dispatch`
+Воркфлоу `.github/workflows/lighthouse.yml` раз в сутки в 04:21 МСК (`timezone: Europe/Moscow`) и по
+`workflow_dispatch`
 собирает Lighthouse-отчёт по четырём страницам задеплоенного сервиса (`APP_URL`), сохраняет его
 артефактом и передаёт находки агенту. PR workflow не блокирует.
 
