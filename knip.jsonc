@@ -8,6 +8,13 @@
       "ignoreDependencies": ["@commitlint/cli", "agnix", "syncpack"],
       // Invoked from opencode.json as the chrome-devtools MCP command.
       "entry": ["scripts/chrome-devtools-mcp.mjs"],
+      // Prototype scripts for Lighthouse CI findings extraction (#39).
+      "ignore": [
+        "scripts/lighthouse-findings.mjs",
+        "scripts/lighthouse-findings.test.mjs",
+        "scripts/lighthouse-summary.mjs",
+        "scripts/lighthouse-summary.test.mjs",
+      ],
     },
     "packages/spec": {
       // TypeSpec emitters are declared in tspconfig.yaml, not imported from TypeScript.
