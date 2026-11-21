@@ -1,5 +1,5 @@
 import type { Booking, MeetingType, Slot } from "@calendar/sdk";
-import type { FormEvent, ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   buildBookingCalendar,
@@ -11,6 +11,12 @@ import {
 } from "../lib/slots";
 
 type MeetingTypeSummary = Pick<MeetingType, "name" | "durationMinutes">;
+
+const MAX_DESCRIPTION_LENGTH = 2000;
+
+export function codePointLength(value: string): number {
+  return [...value].length;
+}
 
 export type BookingFormState =
   | { status: "idle" }
@@ -87,10 +93,22 @@ function BookingForm({
   state: BookingFormState;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [description, setDescription] = useState("");
   const submitting = state.status === "submitting";
+  const descriptionLength = codePointLength(description);
+  const descriptionTooLong = descriptionLength > MAX_DESCRIPTION_LENGTH;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+    if (descriptionTooLong) {
+      event.preventDefault();
+      return;
+    }
+
+    onSubmit?.(event);
+  }
 
   return (
-    <form className="mt-6 grid gap-4 rounded-md border border-border p-4" onSubmit={onSubmit}>
+    <form className="mt-6 grid gap-4 rounded-md border border-border p-4" onSubmit={handleSubmit}>
       <p className="text-sm font-medium">
         Выбрано: {formatSlotDay(slot.startAt, guestTimeZone)},{" "}
         {formatSlotTime(slot.startAt, guestTimeZone)}
@@ -120,17 +138,24 @@ function BookingForm({
           aria-describedby="booking-description-hint"
           className="rounded-md border border-border bg-background px-3 py-2"
           id="booking-description"
-          maxLength={2000}
           name="description"
+          onChange={(event) => setDescription(event.target.value)}
           rows={3}
+          value={description}
         />
       </label>
-      <span className="text-xs text-muted-foreground" id="booking-description-hint">
-        До 2000 символов
+      <span
+        className="text-xs text-muted-foreground"
+        id="booking-description-hint"
+        role={descriptionTooLong ? "alert" : undefined}
+      >
+        {descriptionTooLong
+          ? `Описание длиннее ${MAX_DESCRIPTION_LENGTH} символов: сейчас ${descriptionLength}`
+          : `До ${MAX_DESCRIPTION_LENGTH} символов`}
       </span>
       <button
         className="justify-self-start rounded-md border border-border bg-background px-4 py-2 hover:bg-muted disabled:opacity-50"
-        disabled={submitting}
+        disabled={submitting || descriptionTooLong}
         type="submit"
       >
         {submitting ? "Бронирование..." : "Забронировать"}
