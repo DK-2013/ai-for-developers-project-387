@@ -119,6 +119,23 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # The runner has no mise and no hk hooks. Install the toolchain the repo
+      # expects and a commit-msg hook, so the agent learns about a malformed
+      # commit message before the push instead of from the quality job.
+      - name: Prepare toolchain and commit-msg hook
+        if: steps.budget-check.outputs.allowed == 'true'
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          mkdir -p .git/hooks
+          cat > .git/hooks/commit-msg <<'HOOK'
+          #!/bin/sh
+          exec ./node_modules/.bin/commitlint --edit "$1"
+          HOOK
+          chmod +x .git/hooks/commit-msg
+
       # `opencode github run` implements the action, but the action installs the
       # latest 1.x. Pin the version: the run relies on 1.19.6 pushing the commit
       # the agent made itself instead of committing its own summary.
