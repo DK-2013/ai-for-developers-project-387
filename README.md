@@ -162,6 +162,25 @@ Chromium для Playwright и проходит сценарии из `packages/w
 после `pnpm codegen`; браузер ставится командой `playwright install --with-deps chromium`.
 Ручной чек-лист для проверки UI через MCP описан в `docs/agents/browser-checks.md`.
 
+## Lighthouse CI
+
+Workflow `.github/workflows/lighthouse.yml` раз в сутки в 04:21 МСК (`cron` в GitHub Actions только
+в UTC, поэтому `01:21` UTC) и по `workflow_dispatch` проверяет задеплоенный сервис из переменной
+репозитория `APP_URL`. Перед замером шаг ждёт `/healthz` до 5 минут: бесплатный Render засыпает и
+может отвечать дольше минуты.
+
+Что мерится: четыре страницы (`/`, `/owner`, `/owner/meeting-types`, `/book/{id}`), mobile, три
+прогона, медиана. Бюджеты заданы в `.lighthouserc.json`: performance ≥ 0.80, accessibility,
+best-practices и SEO ≥ 0.90, LCP ≤ 2500 мс, CLS ≤ 0.1, TBT ≤ 300 мс.
+
+Прогон ничего не блокирует. HTML- и JSON-отчёты уходят артефактом `lighthouse-report-<run_id>`
+(retention 30 дней), сводка — в Summary запуска, а находки агент публикует issue с меткой
+`lighthouse`: одна issue на страницу, до трёх новых за прогон, без дублей. Если бюджет снова
+проходит, issue моложе недели получает один комментарий, более старая — закрывается.
+
+`APP_URL` не задан или сервис не поднялся за 5 минут — job падает, issue не создаётся. Правки в
+`.lighthouseci/` не коммитятся.
+
 ## Проверка UI и деплоя (MCP)
 
 Для ручной проверки интерфейса и работы с деплоем из OpenCode подключены MCP-серверы. Они объявлены в `opencode.json` и не входят в Docker-образ: браузерные серверы запускаются локально, Render MCP работает удалённо.
