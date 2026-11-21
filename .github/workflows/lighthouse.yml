@@ -130,8 +130,8 @@ jobs:
       - name: List existing Lighthouse issues
         run: |
           set -euo pipefail
-          gh issue list --state all --limit 1000 --json number,state,updatedAt,body \
-            | jq '[.[] | select((.body // "") | contains("<!-- lighthouse: "))]' \
+          gh issue list --state all --limit 1000 --json number,state,updatedAt,body,labels \
+            | jq '[.[] | select((.labels | map(.name)) | index("lighthouse"))]' \
             > .lighthouseci/existing-issues.json
 
       - name: Upload the Lighthouse report
@@ -145,6 +145,8 @@ jobs:
             .lighthouseci/assertion-results.json
             .lighthouseci/findings.md
           retention-days: 30
+          # .lighthouseci is a hidden directory; the action skips hidden files by default.
+          include-hidden-files: true
           if-no-files-found: warn
 
       # The composite action installs the latest release; pin the version so the
