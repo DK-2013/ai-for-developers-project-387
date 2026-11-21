@@ -10,7 +10,7 @@ const FIXED_NOW = new Date("2026-01-05T10:00:00.000Z");
 const DEFAULT_MEETING_TYPE_ID = "00000000-0000-4000-8000-000000000001";
 const UNKNOWN_MEETING_TYPE_ID = "00000000-0000-4000-8000-000000000099";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const OVER_LIMIT_DESCRIPTION = "🔥".repeat(2001);
+const OVER_LIMIT_DESCRIPTION = "🔥".repeat(1001);
 
 type BookingBody = {
   id: string;
@@ -187,8 +187,8 @@ describe("POST /bookings", () => {
     expect(body.description).toBeUndefined();
   });
 
-  it("accepts a description of exactly 2000 code points", async () => {
-    const description = "🔥".repeat(2000);
+  it("accepts a description of exactly 1000 code points", async () => {
+    const description = "🔥".repeat(1000);
     const response = await postBooking(bookingRequest({ description }));
     const body = response.body as BookingBody;
 
@@ -196,7 +196,7 @@ describe("POST /bookings", () => {
 
     const codePoints = [...(body.description ?? "")].length;
 
-    expect(codePoints).toBe(2000);
+    expect(codePoints).toBe(1000);
   });
 
   it("does not copy the meeting type description into the booking", async () => {
@@ -251,7 +251,7 @@ describe("POST /bookings", () => {
     ["description that is not a string", bookingRequest({ description: 42 })],
     ["description that is null", bookingRequest({ description: null })],
     [
-      "description longer than 2000 code points",
+      "description longer than 1000 code points",
       bookingRequest({ description: OVER_LIMIT_DESCRIPTION }),
     ],
   ])("returns 400 for %s", async (_label, body) => {

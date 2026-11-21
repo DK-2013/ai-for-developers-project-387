@@ -4,8 +4,8 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   const meetingTypeName = `Booking ${Date.now()} ${Math.random().toString(16).slice(2)}`;
   const attendeeName = "Гость E2E";
   const attendeeEmail = "guest-e2e@example.com";
-  const description = "😀".repeat(2000);
-  const tooLongDescription = "😀".repeat(2001);
+  const description = "😀".repeat(1000);
+  const tooLongDescription = "😀".repeat(1001);
 
   const createResponse = await request.post("/api/meeting-types", {
     data: {
@@ -59,11 +59,11 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
   await page.getByRole("textbox", { name: "E-mail" }).fill(attendeeEmail);
 
   await descriptionField.fill(tooLongDescription);
-  await expect(page.getByText(/Описание длиннее 2000 символов/)).toBeVisible();
+  await expect(page.getByText(/Описание длиннее 1000 символов/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Забронировать" })).toBeDisabled();
 
   await descriptionField.fill(description);
-  await expect(page.getByText("До 2000 символов")).toBeVisible();
+  await expect(page.getByText("До 1000 символов")).toBeVisible();
 
   const bookingResponse = page.waitForResponse(
     (response) =>

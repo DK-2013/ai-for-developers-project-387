@@ -103,17 +103,17 @@ describe("booking flow", () => {
     expect(markup).toContain("Описание (необязательно)");
   });
 
-  it("shows the 2000-character limit hint next to the description field", () => {
+  it("shows the 1000-character limit hint next to the description field", () => {
     const markup = renderView({ selectedSlot: slots[0] });
 
-    expect(markup).toContain("До 2000 символов");
+    expect(markup).toContain("До 1000 символов");
     expect(markup).not.toContain("Описание длиннее");
   });
 
   it("counts description length in code points, not UTF-16 units", () => {
-    expect(codePointLength("😀".repeat(1500))).toBe(1500);
-    expect(codePointLength("😀".repeat(2000))).toBe(2000);
-    expect(codePointLength("😀".repeat(2001))).toBe(2001);
+    expect(codePointLength("😀".repeat(999))).toBe(999);
+    expect(codePointLength("😀".repeat(1000))).toBe(1000);
+    expect(codePointLength("😀".repeat(1001))).toBe(1001);
   });
 
   it("disables the submit button while submitting", () => {

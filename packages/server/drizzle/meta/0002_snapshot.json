@@ -41,7 +41,7 @@
         },
         "description": {
           "name": "description",
-          "type": "varchar(2000)",
+          "type": "varchar(1000)",
           "primaryKey": false,
           "notNull": false
         },
