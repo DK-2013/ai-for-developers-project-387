@@ -58,7 +58,7 @@ model CreateBookingRequest {
   @maxLength(200) attendeeName: string;
   @format("email") @maxLength(254) attendeeEmail: string;
   /** Optional guest-supplied context for the call. Blank text is treated as absent. */
-  @maxLength(2000) description?: string;
+  @maxLength(1000) description?: string;
 }
 
 model Booking {
@@ -74,7 +74,7 @@ model Booking {
   attendeeEmail: string;
 
   /** Guest-supplied context captured when the booking was created. */
-  @maxLength(2000) description?: string;
+  @maxLength(1000) description?: string;
 }
 
 model BookingList {

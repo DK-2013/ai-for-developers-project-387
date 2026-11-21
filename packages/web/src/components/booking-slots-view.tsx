@@ -12,7 +12,7 @@ import {
 
 type MeetingTypeSummary = Pick<MeetingType, "name" | "durationMinutes">;
 
-const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_DESCRIPTION_LENGTH = 1000;
 
 export function codePointLength(value: string): number {
   return [...value].length;
