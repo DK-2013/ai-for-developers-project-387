@@ -103,8 +103,12 @@ jobs:
       - name: Assert budgets
         run: |
           set -uo pipefail
-          pnpm dlx @lhci/cli@0.16.1 assert --config="$RUNNER_TEMP/lighthouserc.json"
-          status=$?
+          # GitHub runs this step with `bash -e`, and a failed budget exits 1.
+          # Capture the code instead of letting `-e` stop the step before the
+          # findings are extracted.
+          status=0
+          pnpm dlx @lhci/cli@0.16.1 assert --config="$RUNNER_TEMP/lighthouserc.json" ||
+            status=$?
           runs="$(find .lighthouseci -maxdepth 1 -name 'lhr-*.json' | wc -l | tr -d ' ')"
           if [ "$runs" -ne 12 ]; then
             echo "::error::Expected 12 Lighthouse runs (4 pages x 3), got $runs"
