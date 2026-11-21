@@ -2,7 +2,11 @@ import type { Booking, Slot } from "@calendar/sdk";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import { BookingSlotsView, type BookingSlotsViewProps } from "../components/booking-slots-view";
+import {
+  BookingSlotsView,
+  codePointLength,
+  type BookingSlotsViewProps,
+} from "../components/booking-slots-view";
 
 const slots: Slot[] = [
   { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:15:00Z") },
@@ -89,11 +93,11 @@ describe("booking flow", () => {
     expect(markup).toContain("Забронировать");
   });
 
-  it("offers an optional multi-line description field", () => {
+  it("offers an optional multi-line description field without a UTF-16 length cap", () => {
     const markup = renderView({ selectedSlot: slots[0] });
     const textarea = /<textarea[^>]*name="description"[^>]*>/.exec(markup)?.[0] ?? "";
 
-    expect(textarea).toContain('maxLength="2000"');
+    expect(textarea).not.toContain("maxLength");
     expect(textarea).toContain('rows="3"');
     expect(textarea).not.toContain("required");
     expect(markup).toContain("Описание (необязательно)");
@@ -103,6 +107,13 @@ describe("booking flow", () => {
     const markup = renderView({ selectedSlot: slots[0] });
 
     expect(markup).toContain("До 2000 символов");
+    expect(markup).not.toContain("Описание длиннее");
+  });
+
+  it("counts description length in code points, not UTF-16 units", () => {
+    expect(codePointLength("😀".repeat(1500))).toBe(1500);
+    expect(codePointLength("😀".repeat(2000))).toBe(2000);
+    expect(codePointLength("😀".repeat(2001))).toBe(2001);
   });
 
   it("disables the submit button while submitting", () => {
