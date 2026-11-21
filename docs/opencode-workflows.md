@@ -26,8 +26,10 @@ pull request.
   `anomalyco/opencode/github` ставил бы последнюю 1.x.
 - **Права:** `GITHUB_TOKEN` только на чтение содержимого (`contents: read`), плюс `id-token: write`
   для обмена OIDC на токен OpenCode GitHub App; этим токеном агент отвечает в треде и создаёт
-  ветки и pull request. `issues: write` нужен только для служебного комментария с бюджетом.
-  `actions/checkout` работает с `persist-credentials: false`.
+  ветки и pull request. `issues: write` нужен `gh` внутри агентской сессии: там `GH_TOKEN` —
+  это `GITHUB_TOKEN`, поэтому операции с issue идут от его имени. `pull-requests: write` нужен
+  для служебного комментария с бюджетом: запись в pull request GitHub авторизует по этому scope,
+  `issues: write` для неё недостаточно. `actions/checkout` работает с `persist-credentials: false`.
 - **Лимиты:** таймаут job — 30 минут; `concurrency` на issue или PR: одновременно выполняется
   один запуск, следующий ждёт в очереди, текущий не отменяется.
 

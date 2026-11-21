@@ -34,8 +34,12 @@ jobs:
       # Exchanged through OIDC for an OpenCode GitHub App token. That token
       # writes comments and branches, so contents on GITHUB_TOKEN stays read-only.
       id-token: write
-      # The chat budget keeps its counter in a comment on the pull request.
+      # `gh` inside the agent session runs on GITHUB_TOKEN, so issue operations
+      # need this scope.
       issues: write
+      # The chat budget keeps its counter in a comment on the pull request, and
+      # GitHub authorizes writes on a pull request through this scope.
+      pull-requests: write
     steps:
       # Reads the current budget counter without modifying it. Outputs:
       # - allowed: true/false (whether the request may proceed)
