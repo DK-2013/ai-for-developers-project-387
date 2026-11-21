@@ -2,12 +2,17 @@ import type { Booking, MeetingType, Slot } from "@calendar/sdk";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
+  activeDay,
+  type BookingFormState,
+  type GuestSelection,
+  isSlotSelected,
+} from "../lib/booking-selection";
+import {
   buildBookingCalendar,
   type BookingCalendar,
   type BookingCalendarDay,
   formatSlotDay,
   formatSlotTime,
-  resolveActiveDay,
 } from "../lib/slots";
 
 type MeetingTypeSummary = Pick<MeetingType, "name" | "durationMinutes">;
@@ -17,12 +22,6 @@ const MAX_DESCRIPTION_LENGTH = 1000;
 export function codePointLength(value: string): number {
   return [...value].length;
 }
-
-export type BookingFormState =
-  | { status: "idle" }
-  | { status: "submitting" }
-  | { status: "success"; booking: Booking }
-  | { status: "error"; message: string };
 
 export type BookingSlotsViewProps =
   | { status: "loading"; meetingType?: MeetingTypeSummary }
@@ -35,11 +34,9 @@ export type BookingSlotsViewProps =
       windowStart: Date;
       windowEnd: Date;
       slots: readonly Slot[];
-      selectedSlot?: Slot;
-      selectedDayKey?: string;
+      selection: GuestSelection;
       onSelectSlot?: (slot: Slot) => void;
       onSelectDay?: (dayKey: string) => void;
-      booking: BookingFormState;
       onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
     };
 
@@ -374,16 +371,14 @@ function DaySlots({
   heading,
   day,
   guestTimeZone,
-  selectedSlot,
-  booking,
+  selection,
   onSelectSlot,
   onSubmit,
 }: {
   heading: string;
   day: BookingCalendarDay;
   guestTimeZone: string;
-  selectedSlot?: Slot;
-  booking: BookingFormState;
+  selection: GuestSelection;
   onSelectSlot?: (slot: Slot) => void;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -396,17 +391,17 @@ function DaySlots({
             guestTimeZone={guestTimeZone}
             key={slot.startAt.toISOString()}
             onSelect={onSelectSlot}
-            selected={selectedSlot?.startAt.getTime() === slot.startAt.getTime()}
+            selected={isSlotSelected(selection, slot)}
             slot={slot}
           />
         ))}
       </ul>
-      {selectedSlot ? (
+      {selection.selectedSlot ? (
         <BookingForm
           guestTimeZone={guestTimeZone}
           onSubmit={onSubmit}
-          slot={selectedSlot}
-          state={booking}
+          slot={selection.selectedSlot}
+          state={selection.form}
         />
       ) : null}
     </section>
@@ -414,11 +409,14 @@ function DaySlots({
 }
 
 function SlotsContent({ props }: { props: ReadyProps }) {
-  if (props.booking.status === "success") {
+  if (props.selection.form.status === "success") {
     return (
       <div className="mt-6 space-y-6">
         <TimeZoneReference timezone={props.timezone} guestTimeZone={props.guestTimeZone} />
-        <SuccessContent booking={props.booking.booking} guestTimeZone={props.guestTimeZone} />
+        <SuccessContent
+          booking={props.selection.form.booking}
+          guestTimeZone={props.guestTimeZone}
+        />
       </div>
     );
   }
@@ -429,34 +427,29 @@ function SlotsContent({ props }: { props: ReadyProps }) {
     props.slots,
     props.guestTimeZone,
   );
-  const activeDay = resolveActiveDay(calendar, {
-    guestTimeZone: props.guestTimeZone,
-    selectedDayKey: props.selectedDayKey,
-    selectedSlot: props.selectedSlot,
-  });
-  const activeStart = activeDay?.slots.at(0)?.startAt;
+  const shownDay = activeDay(props.selection, calendar);
+  const activeStart = shownDay?.slots.at(0)?.startAt;
 
   return (
     <div className="mt-6 space-y-6">
       <TimeZoneReference timezone={props.timezone} guestTimeZone={props.guestTimeZone} />
-      <BookingError state={props.booking} />
-      {activeDay === undefined || activeStart === undefined ? (
+      <BookingError state={props.selection.form} />
+      {shownDay === undefined || activeStart === undefined ? (
         <p className="text-muted-foreground">Нет свободных слотов в ближайшие 14 дней.</p>
       ) : (
         <div className="grid items-start gap-6 md:grid-cols-[auto_1fr]">
           <BookingCalendarNav
-            activeDayKey={activeDay.key}
+            activeDayKey={shownDay.key}
             calendar={calendar}
             onSelectDay={props.onSelectDay}
           />
           <DaySlots
-            booking={props.booking}
-            day={activeDay}
+            day={shownDay}
             guestTimeZone={props.guestTimeZone}
             heading={formatSlotDay(activeStart, props.guestTimeZone)}
             onSelectSlot={props.onSelectSlot}
             onSubmit={props.onSubmit}
-            selectedSlot={props.selectedSlot}
+            selection={props.selection}
           />
         </div>
       )}

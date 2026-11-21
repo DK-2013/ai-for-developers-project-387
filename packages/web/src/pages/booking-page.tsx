@@ -3,8 +3,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { bookingsQuery, createBooking, meetingTypesQuery, slotsQuery } from "../api/queries";
-import { BookingSlotsView, type BookingFormState } from "../components/booking-slots-view";
-import { detectBrowserTimeZone, guestDayKey } from "../lib/slots";
+import { BookingSlotsView } from "../components/booking-slots-view";
+import {
+  type GuestSelection,
+  initialSelection,
+  reconcile,
+  selectDay,
+  selectSlot,
+  submitFailed,
+  submitStarted,
+  submitSucceeded,
+} from "../lib/booking-selection";
+import { detectBrowserTimeZone } from "../lib/slots";
 
 const CONFLICT_MESSAGE = "Это время уже занято. Пожалуйста, выберите другой слот.";
 const INVALID_MESSAGE = "Проверьте имя, e-mail и описание: сервер отклонил запрос.";
@@ -17,9 +27,7 @@ type BookingPageProps = {
 export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: BookingPageProps = {}) {
   const { id } = useParams();
   const queryClient = useQueryClient();
-  const [selectedSlot, setSelectedSlot] = useState<Slot>();
-  const [selectedDayKey, setSelectedDayKey] = useState<string>();
-  const [formState, setFormState] = useState<BookingFormState>({ status: "idle" });
+  const [rawSelection, setSelection] = useState(initialSelection);
   const meetingTypesResult = useQuery(meetingTypesQuery);
   const slotsResult = useQuery({
     ...slotsQuery(id ?? ""),
@@ -33,18 +41,26 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
       ? undefined
       : { name: meetingType.name, durationMinutes: meetingType.durationMinutes };
 
+  const slotsData = slotsResult.data;
+  const slotList = slotsData !== undefined && "slots" in slotsData ? slotsData : undefined;
+  const offeredSlots = slotList?.slots;
+
+  function withOfferedSlots(current: GuestSelection): GuestSelection {
+    return offeredSlots !== undefined ? reconcile(current, offeredSlots, guestTimeZone) : current;
+  }
+
+  const selection = withOfferedSlots(rawSelection);
+
+  function updateSelection(change: (current: GuestSelection) => GuestSelection): void {
+    setSelection((current) => change(withOfferedSlots(current)));
+  }
+
   function handleSelectSlot(slot: Slot): void {
-    setSelectedSlot(slot);
-    setFormState({ status: "idle" });
+    updateSelection((current) => selectSlot(current, slot, guestTimeZone));
   }
 
   function handleSelectDay(dayKey: string): void {
-    if (selectedSlot !== undefined && guestDayKey(selectedSlot.startAt, guestTimeZone) !== dayKey) {
-      setSelectedSlot(undefined);
-      setFormState({ status: "idle" });
-    }
-
-    setSelectedDayKey(dayKey);
+    updateSelection((current) => selectDay(current, dayKey, guestTimeZone));
   }
 
   async function refreshSlots(): Promise<void> {
@@ -55,6 +71,8 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+
+    const selectedSlot = selection.selectedSlot;
 
     if (id === undefined || selectedSlot === undefined) {
       return;
@@ -77,35 +95,41 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
       request.description = description;
     }
 
-    setFormState({ status: "submitting" });
+    updateSelection((current) => submitStarted(current));
 
     try {
       const result = await mutation.mutateAsync(request);
 
       if ("code" in result) {
         if (result.code === "slot_not_available") {
-          setSelectedSlot(undefined);
-          setFormState({ status: "error", message: CONFLICT_MESSAGE });
+          updateSelection((current) =>
+            submitFailed(current, { reason: "slot_taken", message: CONFLICT_MESSAGE }),
+          );
           await refreshSlots();
           return;
         }
 
         if (result.code === "meeting_type_not_found") {
-          setFormState({ status: "error", message: "Тип встречи не найден." });
+          updateSelection((current) =>
+            submitFailed(current, { reason: "rejected", message: "Тип встречи не найден." }),
+          );
           return;
         }
 
-        setFormState({ status: "error", message: INVALID_MESSAGE });
+        updateSelection((current) =>
+          submitFailed(current, { reason: "rejected", message: INVALID_MESSAGE }),
+        );
         return;
       }
 
-      setSelectedSlot(undefined);
-      setFormState({ status: "success", booking: result });
+      updateSelection((current) => submitSucceeded(current, result));
       await queryClient.invalidateQueries({ queryKey: bookingsQuery.queryKey });
       await refreshSlots();
     } catch (error) {
       console.error("Create booking failed", error);
-      setFormState({ status: "error", message: GENERIC_ERROR_MESSAGE });
+      updateSelection((current) =>
+        submitFailed(current, { reason: "rejected", message: GENERIC_ERROR_MESSAGE }),
+      );
     }
   }
 
@@ -127,9 +151,7 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
     return <BookingSlotsView status="error" message="Тип встречи не найден." />;
   }
 
-  const slots = slotsResult.data;
-
-  if (slots === undefined || !("slots" in slots)) {
+  if (slotList === undefined) {
     return (
       <BookingSlotsView
         status="error"
@@ -141,19 +163,17 @@ export function BookingPage({ guestTimeZone = detectBrowserTimeZone() }: Booking
 
   return (
     <BookingSlotsView
-      booking={formState}
       guestTimeZone={guestTimeZone}
       meetingType={meetingTypeSummary}
       onSelectDay={handleSelectDay}
       onSelectSlot={handleSelectSlot}
       onSubmit={handleSubmit}
-      selectedDayKey={selectedDayKey}
-      selectedSlot={selectedSlot}
-      slots={slots.slots}
+      selection={selection}
+      slots={slotList.slots}
       status="ready"
-      timezone={slots.timezone}
-      windowStart={slots.windowStart}
-      windowEnd={slots.windowEnd}
+      timezone={slotList.timezone}
+      windowStart={slotList.windowStart}
+      windowEnd={slotList.windowEnd}
     />
   );
 }

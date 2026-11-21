@@ -55,3 +55,7 @@ _Avoid_: Local time, server time zone, timezone setting
 **Guest time zone**:
 The IANA zone of the guest's browser. The guest-facing calendar renders in it, with the owner's zone shown as reference; it never affects the slot grid, which is fixed by the owner's zone.
 _Avoid_: Display zone, user locale
+
+**Guest selection**:
+The guest's current choice on the booking page: the selected slot, the selected day, and the form state. The selected slot always belongs to the selected day.
+_Avoid_: Selection state, booking state, UI state
