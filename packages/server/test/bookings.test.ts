@@ -254,6 +254,10 @@ describe("POST /bookings", () => {
       "description longer than 1000 code points",
       bookingRequest({ description: OVER_LIMIT_DESCRIPTION }),
     ],
+    [
+      "whitespace-only description longer than 1000 code points",
+      bookingRequest({ description: " ".repeat(1001) }),
+    ],
   ])("returns 400 for %s", async (_label, body) => {
     const response = await postBooking(body);
 
