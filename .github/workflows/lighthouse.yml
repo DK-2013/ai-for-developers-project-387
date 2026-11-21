@@ -1,0 +1,252 @@
+name: lighthouse
+
+on:
+  schedule:
+    # 04:21 Europe/Moscow. GitHub Actions cron is UTC-only, so 01:21 UTC.
+    - cron: "21 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse
+  cancel-in-progress: false
+
+jobs:
+  lighthouse:
+    name: Lighthouse report
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Findings are published as issues. Nothing here writes code, so the token
+      # is scoped to issues only.
+      issues: write
+
+    env:
+      TZ: Europe/Moscow
+      APP_URL: ${{ vars.APP_URL }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      ARTIFACT_NAME: lighthouse-report-${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          install: true
+          cache: true
+
+      # Render sleeps on the free plan and can take minutes to answer. Without
+      # --fail a 503 body exits 0, which would look like a healthy service.
+      - name: Wake the Render service
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL:-}" ]; then
+            echo "::error::The APP_URL repository variable is not set"
+            exit 1
+          fi
+          APP_URL="${APP_URL%/}"
+          echo "APP_URL=$APP_URL" >> "$GITHUB_ENV"
+          started=$SECONDS
+          deadline=$((SECONDS + 300))
+          while true; do
+            body="$(curl -fsS --max-time 25 "$APP_URL/healthz" 2>/dev/null || true)"
+            if [ "$(jq -r '.status // empty' <<<"$body" 2>/dev/null)" = "ok" ]; then
+              echo "Service is awake after $((SECONDS - started))s"
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$APP_URL did not answer /healthz with {\"status\":\"ok\"} within 300s"
+              exit 1
+            fi
+            sleep 5
+          done
+
+      # The booking page needs a real meeting type id; the seeded type is part of
+      # the product contract, so a missing one is a broken deployment.
+      - name: Resolve the booking page
+        run: |
+          set -euo pipefail
+          id="$(curl -fsS --max-time 30 "$APP_URL/api/meeting-types" | jq -r '.meetingTypes[0].id // empty')"
+          if [ -z "$id" ]; then
+            echo "::error::No meeting type found; cannot audit the booking page"
+            exit 1
+          fi
+          echo "BOOKING_PATH=/book/$id" >> "$GITHUB_ENV"
+
+      # URLs depend on APP_URL and the seeded meeting type, so they are injected
+      # into the committed config at run time.
+      - name: Prepare the Lighthouse config
+        run: |
+          set -euo pipefail
+          rm -rf .lighthouseci
+          jq --arg base "$APP_URL" --arg booking "$BOOKING_PATH" \
+            '.ci.collect.url = [$base + "/", $base + "/owner", $base + "/owner/meeting-types", $base + $booking]' \
+            .lighthouserc.json > "$RUNNER_TEMP/lighthouserc.json"
+
+      - name: Collect Lighthouse reports
+        timeout-minutes: 15
+        run: pnpm dlx @lhci/cli@0.16.1 collect --config="$RUNNER_TEMP/lighthouserc.json"
+
+      # A budget failure exits 1, and so does an infrastructure failure. They are
+      # told apart by the files: assertion-results.json means budgets ran.
+      - name: Assert budgets
+        run: |
+          set -uo pipefail
+          pnpm dlx @lhci/cli@0.16.1 assert --config="$RUNNER_TEMP/lighthouserc.json"
+          status=$?
+          runs="$(find .lighthouseci -maxdepth 1 -name 'lhr-*.json' | wc -l | tr -d ' ')"
+          if [ "$runs" -ne 12 ]; then
+            echo "::error::Expected 12 Lighthouse runs (4 pages x 3), got $runs"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ] && [ ! -s .lighthouseci/assertion-results.json ]; then
+            echo "::error::Lighthouse assert exited $status without assertion results"
+            exit 1
+          fi
+          echo "Budget failures are published as issues; the job stays green."
+
+      - name: Extract findings
+        run: |
+          node scripts/lighthouse-findings.mjs \
+            .lighthouseci/assertion-results.json .lighthouseci/findings.md
+
+      - name: Write the step summary
+        if: always()
+        continue-on-error: true
+        run: node scripts/lighthouse-summary.mjs .lighthouseci/findings.md
+
+      # The agent matches by marker, not by title. A full listing is used instead
+      # of --label because gh falls back to the search index with that flag.
+      - name: List existing Lighthouse issues
+        run: |
+          set -euo pipefail
+          gh issue list --state all --limit 1000 --json number,state,updatedAt,body \
+            | jq '[.[] | select((.body // "") | contains("<!-- lighthouse: "))]' \
+            > .lighthouseci/existing-issues.json
+
+      - name: Upload the Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            .lighthouseci/lhr-*.html
+            .lighthouseci/lhr-*.json
+            .lighthouseci/assertion-results.json
+            .lighthouseci/findings.md
+          retention-days: 30
+          if-no-files-found: warn
+
+      # The composite action installs the latest release; pin the version so the
+      # permission behaviour stays the one this workflow was verified against.
+      - name: Install OpenCode
+        timeout-minutes: 3
+        env:
+          OPENCODE_VERSION: 1.19.6
+          OPENCODE_SHA256: 47734e08968b30cc22a0bffb6d9feeed76ad4aa743213a12122040392d09a057
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/opencode.tar.gz"
+          curl -fsSLo "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"
+          echo "${OPENCODE_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$HOME/.opencode/bin"
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Publish findings
+        timeout-minutes: 10
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          MODEL: ${{ vars.OC_REVIEW_MODEL }}
+          # A marker must be edited, so edit stays denied and the allowlist covers
+          # the exact gh verbs. An invalid permission document is silently ignored
+          # by OpenCode, hence the jq check below.
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"deny","gh issue list *":"allow","gh issue view *":"allow","gh issue create *":"allow","gh issue edit *":"allow","gh issue reopen *":"allow","gh issue close *":"allow","gh issue comment *":"allow"}}'
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "::error::Lighthouse publishing failed: $1"
+            exit 1
+          }
+          [ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is not set"
+          [ -n "${MODEL:-}" ] || fail "OC_REVIEW_MODEL is not set"
+          command -v opencode >/dev/null 2>&1 || fail "opencode is not installed"
+          jq -e . >/dev/null <<<"$OPENCODE_PERMISSION" || fail "OPENCODE_PERMISSION is not valid JSON"
+          [ -s .lighthouseci/findings.md ] || fail "findings are missing"
+          [ -s .lighthouseci/existing-issues.json ] || fail "existing issues are missing"
+
+          run_date="$(date '+%Y-%m-%d %H:%M')"
+          stale_before="$(date -d '7 days ago' '+%Y-%m-%d')"
+          prompt="$(cat <<'PROMPT'
+          Ты публикуешь результаты ежедневного прогона Lighthouse в репозитории {{REPO}}.
+
+          Дата прогона: {{DATE}} (Europe/Moscow)
+          Порог устаревания: {{STALE_BEFORE}}. Issue с updatedAt раньше этой даты считается старше недели.
+          Коммит: {{SHA}}
+          Прогон: {{RUN_URL}}
+
+          Входные данные — только чтение:
+          - .lighthouseci/findings.md — страницы с проваленными бюджетами и отпечатки вида <!-- lighthouse: /owner -->
+          - .lighthouseci/existing-issues.json — issue репозитория: number, state, updatedAt, body
+          - docs/lighthouse/issue-template.md — шаблон тела issue
+
+          Правила:
+          1. Находка — страница из findings.md. Не добавляй страницы, которых там нет.
+          2. Отпечаток страницы — <!-- lighthouse: /path -->. Сопоставляй issue по нему, не по заголовку.
+          3. Нет совпавшей issue — создай её:
+             gh issue create --label lighthouse --title "[lighthouse] /path" --body-file - <<'EOF'
+             тело по шаблону
+             EOF
+          4. Открытая совпавшая — перезапиши тело целиком:
+             gh issue edit НОМЕР --body-file - <<'EOF'
+             тело по шаблону
+             EOF
+             Комментариев не добавляй.
+          5. Закрытая совпавшая — gh issue reopen НОМЕР, затем перезапиши тело.
+          6. Открытая issue с отпечатком, которого нет в findings.md:
+             - updatedAt раньше {{STALE_BEFORE}} — gh issue close НОМЕР;
+             - иначе — ровно один комментарий "Бюджет снова проходит.", если такого комментария ещё нет.
+          7. Новых issue не больше трёх: findings.md уже содержит максимум три страницы.
+          8. Не удаляй issue, не меняй метки, не трогай issue без отпечатка lighthouse, не правь файлы, не коммить, не создавай PR.
+          9. Текст issue — по-русски; пути, метрики, числа и строки таблицы переноси дословно из findings.md.
+          10. Если находок нет — ничего не создавай и не меняй.
+          11. Если входные файлы битые или противоречивые — ничего не делай.
+
+          Закончи ответ одной строкой: RESULT: OK, RESULT: NO_ISSUE или RESULT: INFRA.
+          PROMPT
+          )"
+          prompt="${prompt//'{{REPO}}'/$GH_REPO}"
+          prompt="${prompt//'{{DATE}}'/$run_date}"
+          prompt="${prompt//'{{STALE_BEFORE}}'/$stale_before}"
+          prompt="${prompt//'{{SHA}}'/$GITHUB_SHA}"
+          prompt="${prompt//'{{RUN_URL}}'/$RUN_URL}"
+
+          log="$RUNNER_TEMP/opencode.jsonl"
+          set +e
+          timeout -k 10s 300s opencode run --print-logs --log-level INFO \
+            --model "$MODEL" --format json "$prompt" < /dev/null | tee "$log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            fail "timeout"
+          elif [ "$status" -ne 0 ]; then
+            fail "opencode exited with status $status"
+          fi
+
+          answer="$RUNNER_TEMP/opencode-answer.md"
+          jq -sr 'map(select(.type == "text") | .part.text) | last // empty' "$log" > "$answer" ||
+            fail "cannot read the agent answer"
+          if grep -qx 'RESULT: INFRA' "$answer"; then
+            fail "the agent reported unusable inputs"
+          fi
