@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.5.0...v0.6.0) (2026-11-21)
+
+
+### Features
+
+* **bookings:** let guests enter and review description ([#25](https://github.com/DK-2013/ai-for-developers-project-387/issues/25)) ([f2680f4](https://github.com/DK-2013/ai-for-developers-project-387/commit/f2680f4ef22f7119a1746fdb3f0d0b7928feb659))
+* **bookings:** round-trip optional description through API ([#24](https://github.com/DK-2013/ai-for-developers-project-387/issues/24)) ([79bfe74](https://github.com/DK-2013/ai-for-developers-project-387/commit/79bfe74b35d81f85c6c9c25ebf88f97d6be2c5ad))
+* **bookings:** show booking description to owner ([#26](https://github.com/DK-2013/ai-for-developers-project-387/issues/26)) ([2924691](https://github.com/DK-2013/ai-for-developers-project-387/commit/29246912ac9bee5533ae56370e26be478e8b487e))
+
+
+### Bug Fixes
+
+* **bookings:** accept 2000 code points in description field ([d0bcce3](https://github.com/DK-2013/ai-for-developers-project-387/commit/d0bcce3869801fcffefdd084556d115b48aa1ec1))
+* **bookings:** cap description at 1000 characters ([c2bcff6](https://github.com/DK-2013/ai-for-developers-project-387/commit/c2bcff6ae2ea46de059509503262713a047c8c03))
+
 ## [0.5.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.4.0...v0.5.0) (2026-11-21)
 
 
