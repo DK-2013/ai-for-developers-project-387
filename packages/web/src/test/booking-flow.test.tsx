@@ -7,9 +7,24 @@ import {
   codePointLength,
   type BookingSlotsViewProps,
 } from "../components/booking-slots-view";
+import {
+  initialSelection,
+  selectDay,
+  selectSlot,
+  submitFailed,
+  submitStarted,
+  submitSucceeded,
+} from "../lib/booking-selection";
+
+const guestTimeZone = "Asia/Tokyo";
+
+const firstSlot: Slot = {
+  startAt: new Date("2026-01-05T07:00:00Z"),
+  endAt: new Date("2026-01-05T07:15:00Z"),
+};
 
 const slots: Slot[] = [
-  { startAt: new Date("2026-01-05T07:00:00Z"), endAt: new Date("2026-01-05T07:15:00Z") },
+  firstSlot,
   { startAt: new Date("2026-01-05T07:15:00Z"), endAt: new Date("2026-01-05T07:30:00Z") },
 ];
 
@@ -49,16 +64,20 @@ const booking: Booking = {
 
 type ReadyProps = Extract<BookingSlotsViewProps, { status: "ready" }>;
 
+function selectedFirstSlot() {
+  return selectSlot(initialSelection(), firstSlot, guestTimeZone);
+}
+
 function renderView(overrides: Partial<ReadyProps> = {}): string {
   const props: ReadyProps = {
     status: "ready",
     meetingType: { name: "Знакомство", durationMinutes: 15 },
     timezone: "Europe/Moscow",
-    guestTimeZone: "Asia/Tokyo",
+    guestTimeZone,
     windowStart: new Date("2026-01-04T21:00:00Z"),
     windowEnd: new Date("2026-01-18T21:00:00Z"),
     slots,
-    booking: { status: "idle" },
+    selection: initialSelection(),
     onSelectSlot: () => {},
     onSubmit: () => {},
     ...overrides,
@@ -82,7 +101,8 @@ describe("booking flow", () => {
   });
 
   it("shows the name and email form for the selected slot", () => {
-    const markup = renderView({ selectedSlot: slots[0] });
+    const selection = selectedFirstSlot();
+    const markup = renderView({ selection });
 
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('name="attendeeName"');
@@ -94,7 +114,8 @@ describe("booking flow", () => {
   });
 
   it("offers an optional multi-line description field without a UTF-16 length cap", () => {
-    const markup = renderView({ selectedSlot: slots[0] });
+    const selection = selectedFirstSlot();
+    const markup = renderView({ selection });
     const textarea = /<textarea[^>]*name="description"[^>]*>/.exec(markup)?.[0] ?? "";
 
     expect(textarea).not.toContain("maxLength");
@@ -104,7 +125,8 @@ describe("booking flow", () => {
   });
 
   it("shows the 1000-character limit hint next to the description field", () => {
-    const markup = renderView({ selectedSlot: slots[0] });
+    const selection = selectedFirstSlot();
+    const markup = renderView({ selection });
 
     expect(markup).toContain("До 1000 символов");
     expect(markup).not.toContain("Описание длиннее");
@@ -117,22 +139,21 @@ describe("booking flow", () => {
   });
 
   it("disables the submit button while submitting", () => {
-    const markup = renderView({
-      selectedSlot: slots[0],
-      booking: { status: "submitting" },
-    });
+    const selected = selectedFirstSlot();
+    const selection = submitStarted(selected);
+    const markup = renderView({ selection });
 
     expect(markup).toContain("disabled");
     expect(markup).toContain("Бронирование...");
   });
 
   it("shows a clear conflict message", () => {
-    const markup = renderView({
-      booking: {
-        status: "error",
-        message: "Это время уже занято. Пожалуйста, выберите другой слот.",
-      },
+    const selected = selectedFirstSlot();
+    const selection = submitFailed(selected, {
+      reason: "slot_taken",
+      message: "Это время уже занято. Пожалуйста, выберите другой слот.",
     });
+    const markup = renderView({ selection });
 
     expect(markup).toContain("Это время уже занято. Пожалуйста, выберите другой слот.");
     expect(markup).toContain('role="alert"');
@@ -140,7 +161,9 @@ describe("booking flow", () => {
   });
 
   it("shows the successful booking instead of the form", () => {
-    const markup = renderView({ booking: { status: "success", booking } });
+    const selected = selectedFirstSlot();
+    const selection = submitSucceeded(selected, booking);
+    const markup = renderView({ selection });
 
     expect(markup).toContain("Вы записаны");
     expect(markup).toContain("Знакомство");
@@ -157,9 +180,9 @@ describe("booking flow", () => {
 
   it("shows the submitted description with preserved line breaks in the confirmation", () => {
     const description = "Уточнить график\nПрислать документы";
-    const markup = renderView({
-      booking: { status: "success", booking: { ...booking, description } },
-    });
+    const describedBooking: Booking = { ...booking, description };
+    const selection = submitSucceeded(selectedFirstSlot(), describedBooking);
+    const markup = renderView({ selection });
 
     expect(markup).toContain(description);
     expect(markup).toContain('class="whitespace-pre-line');
@@ -255,9 +278,10 @@ describe("booking flow", () => {
   });
 
   it("shows the slots of the explicitly selected day", () => {
+    const selection = selectDay(initialSelection(), "2026-01-07", guestTimeZone);
     const markup = renderView({
       slots: [...slots, wednesdaySlot],
-      selectedDayKey: "2026-01-07",
+      selection,
     });
 
     const wednesdayPressed = dayButtonPattern(wednesdayLabel, true);
@@ -270,29 +294,11 @@ describe("booking flow", () => {
     expect(markup).toMatch(mondayNotPressed);
   });
 
-  it("keeps the selected slot's day when a different day is selected", () => {
+  it("marks the selected day and its slot as pressed", () => {
+    const selection = selectedFirstSlot();
     const markup = renderView({
       slots: [...slots, wednesdaySlot],
-      selectedSlot: slots[0],
-      selectedDayKey: "2026-01-07",
-    });
-
-    const mondayPressed = dayButtonPattern(mondayLabel, true);
-    const wednesdayNotPressed = dayButtonPattern(wednesdayLabel, false);
-
-    expect(markup).toContain("16:00");
-    expect(markup).not.toContain("19:00");
-    expect(markup).toContain("понедельник, 5 января");
-    expect(markup).toContain('name="attendeeName"');
-    expect(markup).toMatch(mondayPressed);
-    expect(markup).toMatch(wednesdayNotPressed);
-  });
-
-  it("keeps the selected slot when its own day is reselected", () => {
-    const markup = renderView({
-      slots: [...slots, wednesdaySlot],
-      selectedSlot: slots[0],
-      selectedDayKey: "2026-01-05",
+      selection,
     });
     const mondayPressed = dayButtonPattern(mondayLabel, true);
     const slotPressed = /<button(?=[^>]*aria-pressed="true")[^>]*>16:00<\/button>/;
@@ -322,9 +328,10 @@ describe("booking flow", () => {
 
   it("shows a slot bar only on days with slots that are not selected", () => {
     const markup = renderView({ slots: [...slots, wednesdaySlot] });
+    const selectedDaySelection = selectDay(initialSelection(), "2026-01-07", guestTimeZone);
     const selectedMarkup = renderView({
       slots: [...slots, wednesdaySlot],
-      selectedDayKey: "2026-01-07",
+      selection: selectedDaySelection,
     });
 
     const mondayButton = dayButtonMarkup(markup, mondayLabel);

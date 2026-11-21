@@ -1,11 +1,5 @@
 import type { Slot } from "@calendar/sdk";
 
-type SlotDayGroup = {
-  key: string;
-  heading: string;
-  slots: Slot[];
-};
-
 const dateKeyFormat = (timeZone: string): Intl.DateTimeFormat =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -102,28 +96,6 @@ function groupSlotsByKey(slots: readonly Slot[], timeZone: string): Map<string, 
 }
 
 /**
- * Groups slots by the guest's calendar day. The owner's zone fixes the grid;
- * only the displayed day and time follow the guest's zone.
- */
-export function groupSlotsByDay(slots: readonly Slot[], timeZone: string): SlotDayGroup[] {
-  const headingFormat = dayFormat(timeZone);
-  const groups = groupSlotsByKey(slots, timeZone);
-
-  return [...groups.entries()]
-    .toSorted(([left], [right]) => left.localeCompare(right))
-    .map(([key, groupSlots]) => {
-      const sorted = groupSlots.toSorted(byStart);
-      const first = sorted.at(0);
-
-      if (first === undefined) {
-        throw new Error("Group slots: empty group");
-      }
-
-      return { key, heading: headingFormat.format(first.startAt), slots: sorted };
-    });
-}
-
-/**
  * Builds the Monday-to-Sunday calendar of guest-local dates in the booking window.
  * Dates are walked through UTC midday instants so zone offsets cannot shift a day.
  */
@@ -186,37 +158,6 @@ export function buildBookingCalendar(
   }
 
   return { months, weeks };
-}
-
-/** Selects the day whose slots are shown: chosen slot, chosen day, then first with slots. */
-export function resolveActiveDay(
-  calendar: BookingCalendar,
-  options: {
-    guestTimeZone: string;
-    selectedDayKey?: string;
-    selectedSlot?: Slot;
-  },
-): BookingCalendarDay | undefined {
-  const days = calendar.weeks
-    .flat()
-    .filter((day): day is BookingCalendarDay => day !== null && day.slots.length > 0);
-  const slotKey = options.selectedSlot
-    ? guestDayKey(options.selectedSlot.startAt, options.guestTimeZone)
-    : undefined;
-
-  for (const key of [slotKey, options.selectedDayKey]) {
-    if (key === undefined) {
-      continue;
-    }
-
-    const day = days.find((candidate) => candidate.key === key);
-
-    if (day !== undefined) {
-      return day;
-    }
-  }
-
-  return days.at(0);
 }
 
 /** Formats a slot's start in the guest's browser time zone. */
