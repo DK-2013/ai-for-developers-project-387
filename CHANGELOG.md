@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.1](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.6.0...v0.6.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **lighthouse:** apply the vanished-finding rule with no findings ([#40](https://github.com/DK-2013/ai-for-developers-project-387/issues/40)) ([720a438](https://github.com/DK-2013/ai-for-developers-project-387/commit/720a43874702eb950bbc39588bf40665df9b1106))
+* **lighthouse:** extract findings after failed budgets ([#40](https://github.com/DK-2013/ai-for-developers-project-387/issues/40)) ([ce7fc31](https://github.com/DK-2013/ai-for-developers-project-387/commit/ce7fc31833beb748ed20189cbf81820a3195e220))
+* **lighthouse:** upload hidden reports and filter issues by label ([#40](https://github.com/DK-2013/ai-for-developers-project-387/issues/40)) ([7208356](https://github.com/DK-2013/ai-for-developers-project-387/commit/720835683407954e5bc13c11b0e6caeab8f91ad1))
+
 ## [0.6.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.5.0...v0.6.0) (2026-11-21)
 
 
