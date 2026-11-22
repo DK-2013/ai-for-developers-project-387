@@ -110,7 +110,7 @@ jobs:
           pnpm dlx @lhci/cli@0.16.1 assert --config="$RUNNER_TEMP/lighthouserc.json" ||
             status=$?
           runs="$(find .lighthouseci -maxdepth 1 -name 'lhr-*.json' | wc -l | tr -d ' ')"
-          if [ "$runs" -ne 12 ]; then
+          if [ "$runs" -ne 3 ]; then
             echo "::error::Expected 3 Lighthouse runs (1 page x 3), got $runs"
             exit 1
           fi
