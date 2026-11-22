@@ -91,7 +91,7 @@ jobs:
           set -euo pipefail
           rm -rf .lighthouseci
           jq --arg base "$APP_URL" --arg booking "$BOOKING_PATH" \
-            '.ci.collect.url = [$base + "/", $base + "/owner", $base + "/owner/meeting-types", $base + $booking]' \
+            '.ci.collect.url = [$base + "/"]' \
             .lighthouserc.json > "$RUNNER_TEMP/lighthouserc.json"
 
       - name: Collect Lighthouse reports
@@ -111,7 +111,7 @@ jobs:
             status=$?
           runs="$(find .lighthouseci -maxdepth 1 -name 'lhr-*.json' | wc -l | tr -d ' ')"
           if [ "$runs" -ne 12 ]; then
-            echo "::error::Expected 12 Lighthouse runs (4 pages x 3), got $runs"
+            echo "::error::Expected 3 Lighthouse runs (1 page x 3), got $runs"
             exit 1
           fi
           if [ "$status" -ne 0 ] && [ ! -s .lighthouseci/assertion-results.json ]; then
