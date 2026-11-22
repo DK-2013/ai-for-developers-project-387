@@ -1,0 +1,45 @@
+name: oc-budget-ledger
+
+# A pure counter for the /oc budget. Each run records one admitted attempt on a
+# pull request; a PR's used budget is the number of runs whose title starts with
+# "oc-chat-budget PR #<n> ". Deleting these runs resets the budget, which needs
+# actions: write — a scope the agent's tokens never hold, so the agent cannot
+# reset or forge the counter. This workflow holds no secrets and calls no model.
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number this entry belongs to.
+        required: true
+        type: string
+      run:
+        description: interactive run id that admitted the attempt.
+        required: true
+        type: string
+      attempt:
+        description: interactive run attempt that admitted the attempt.
+        required: true
+        type: string
+
+run-name: "oc-chat-budget PR #${{ inputs.pr }} run ${{ inputs.run }} attempt ${{ inputs.attempt }}"
+
+permissions: {}
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Record the admitted attempt
+        env:
+          PR: ${{ inputs.pr }}
+          RUN: ${{ inputs.run }}
+          ATTEMPT: ${{ inputs.attempt }}
+        run: |
+          set -euo pipefail
+          printf 'Admitted /oc attempt for PR #%s (interactive run %s, attempt %s).\n' \
+            "$PR" "$RUN" "$ATTEMPT"
+          printf 'Delete this run to reset the PR budget:\n'
+          printf '  Actions -> oc-budget-ledger -> this run -> Delete run, or\n'
+          printf '  gh api -X DELETE repos/%s/actions/runs/<id>  (needs actions: write).\n' \
+            "$GITHUB_REPOSITORY"

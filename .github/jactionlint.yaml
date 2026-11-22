@@ -4,9 +4,12 @@ ignores:
     file: .github/workflows/interactive.yml
     reason: >-
       issue_comment and pull_request_review_comment are the only supported entry
-      points for OpenCode; the job runs only for OWNER, MEMBER or COLLABORATOR
-      comments, keeps GITHUB_TOKEN at contents:read, and lets the agent write
-      only through the OpenCode GitHub App token obtained via OIDC.
+      points for OpenCode; the gate job runs only for OWNER, MEMBER or
+      COLLABORATOR comments with no secrets and only actions:read plus
+      pull-requests:read, the agent job keeps contents:read and writes only
+      through the OpenCode GitHub App token obtained via OIDC, and the separate
+      record job (actions:write, contents:write) runs after the agent and never
+      exposes its token to it.
     expires: "2027-05-13"
   - rule: dangerous-triggers
     file: .github/workflows/triage.yml
