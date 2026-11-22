@@ -36,6 +36,10 @@ _Avoid_: Appointment, reservation, meeting
 A booking whose interval overlaps another booking's interval. Touching endpoints do not conflict.
 _Avoid_: Collision, double booking, overlap error
 
+**Booking use case**:
+A booking scenario driven by domain inputs: it resolves the meeting type and the current instant, applies the slot rules, and returns a domain result or a typed error. The HTTP boundary alone maps those errors to status codes.
+_Avoid_: HTTP handler, request handler, endpoint
+
 **Booking window**:
 The 14 owner-local calendar days a guest may book into. The half-interval [today 00:00, today + 14 days 00:00) in the owner's time zone: slots exist from today through today+13 inclusive, and the window slides forward every day.
 _Avoid_: Horizon, range, period

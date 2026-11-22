@@ -1,13 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Temporal } from "temporal-polyfill";
-import type { Booking, NewBooking } from "./bookings/domain.js";
-import { BookingConflictError, createBookingRepository } from "./bookings/repository.js";
+import type { Booking } from "./bookings/domain.js";
+import { createBookingRepository } from "./bookings/repository.js";
+import {
+  createBookingUseCases,
+  MeetingTypeNotFoundError,
+  SlotNotAvailableError,
+  type CreateBookingInput,
+} from "./bookings/use-cases.js";
 import { parseCreateBookingRequest } from "./bookings/validation.js";
 import type { Clock } from "./clock.js";
 import type { OwnerConfig } from "./config.js";
 import type { Database } from "./db/schema.js";
-import { bookableSlot, computeSlots } from "./domain/slots.js";
-import { bookingWindow } from "./domain/time/index.js";
 import type { HttpContext } from "./generated/helpers/router.js";
 import { createCallCalendarRouter } from "./generated/http/router.js";
 import type {
@@ -20,7 +23,7 @@ import type {
 import type { CallCalendar } from "./generated/models/all/index.js";
 import type { MeetingType } from "./meeting-types/domain.js";
 import { createMeetingTypeRepository } from "./meeting-types/repository.js";
-import { isValidMeetingTypeId, parseCreateMeetingTypeRequest } from "./meeting-types/validation.js";
+import { parseCreateMeetingTypeRequest } from "./meeting-types/validation.js";
 import { createSlotRepository } from "./slots/repository.js";
 
 export type RequestHandlerDependencies = {
@@ -45,10 +48,11 @@ function meetingTypeNotFound() {
   };
 }
 
-function currentInstant(clock: Clock): Temporal.Instant {
-  const now = clock();
-
-  return Temporal.Instant.fromEpochMilliseconds(now.getTime());
+function slotNotAvailable() {
+  return {
+    statusCode: 409 as const,
+    body: apiError("slot_not_available", "Slot is not available"),
+  };
 }
 
 function toWireMeetingType(meetingType: MeetingType): WireMeetingType {
@@ -91,6 +95,7 @@ export function createRequestHandler({
   const meetingTypes = createMeetingTypeRepository(db);
   const slots = createSlotRepository(db);
   const bookings = createBookingRepository(db);
+  const bookingUseCases = createBookingUseCases({ meetingTypes, slots, bookings, owner, clock });
 
   const service: CallCalendar<HttpContext> = {
     async healthz() {
@@ -128,25 +133,17 @@ export function createRequestHandler({
     },
 
     async listSlots(_ctx, id) {
-      if (!isValidMeetingTypeId(id)) {
-        return meetingTypeNotFound();
+      let result;
+
+      try {
+        result = await bookingUseCases.listSlots(id);
+      } catch (error) {
+        if (error instanceof MeetingTypeNotFoundError) {
+          return meetingTypeNotFound();
+        }
+
+        throw error;
       }
-
-      const meetingType = await meetingTypes.findById(id);
-
-      if (meetingType === undefined) {
-        return meetingTypeNotFound();
-      }
-
-      const instant = currentInstant(clock);
-      const window = bookingWindow(instant, owner.timeZone);
-      const occupied = await slots.listOccupied(window);
-      const result = computeSlots({
-        now: instant,
-        owner,
-        durationMinutes: meetingType.durationMinutes,
-        occupied,
-      });
 
       const body: SlotList = {
         timezone: owner.timeZone,
@@ -181,40 +178,11 @@ export function createRequestHandler({
         };
       }
 
-      if (!isValidMeetingTypeId(parsed.value.meetingTypeId)) {
-        return meetingTypeNotFound();
-      }
-
-      const meetingType = await meetingTypes.findById(parsed.value.meetingTypeId);
-
-      if (meetingType === undefined) {
-        return meetingTypeNotFound();
-      }
-
-      const instant = currentInstant(clock);
-      const slot = bookableSlot({
-        now: instant,
-        owner,
-        durationMinutes: meetingType.durationMinutes,
-        start: parsed.value.startAt,
-      });
-
-      if (slot === undefined) {
-        return {
-          statusCode: 409 as const,
-          body: apiError("slot_not_available", "Slot is not available"),
-        };
-      }
-
-      let booking: Booking;
-
-      const input: NewBooking = {
-        meetingTypeId: meetingType.id,
-        meetingTypeName: meetingType.name,
+      const input: CreateBookingInput = {
+        meetingTypeId: parsed.value.meetingTypeId,
         attendeeName: parsed.value.attendeeName,
         attendeeEmail: parsed.value.attendeeEmail,
-        startAt: slot.start,
-        endAt: slot.end,
+        startAt: parsed.value.startAt,
       };
 
       if (parsed.value.description !== undefined) {
@@ -222,22 +190,23 @@ export function createRequestHandler({
       }
 
       try {
-        booking = await bookings.create(input);
+        const booking = await bookingUseCases.createBooking(input);
+
+        return {
+          statusCode: 201 as const,
+          body: toWireBooking(booking),
+        };
       } catch (error) {
-        if (error instanceof BookingConflictError) {
-          return {
-            statusCode: 409 as const,
-            body: apiError("slot_not_available", "Slot is not available"),
-          };
+        if (error instanceof MeetingTypeNotFoundError) {
+          return meetingTypeNotFound();
+        }
+
+        if (error instanceof SlotNotAvailableError) {
+          return slotNotAvailable();
         }
 
         throw error;
       }
-
-      return {
-        statusCode: 201 as const,
-        body: toWireBooking(booking),
-      };
     },
   };
 
