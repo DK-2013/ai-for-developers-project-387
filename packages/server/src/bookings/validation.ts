@@ -1,17 +1,9 @@
 import { Temporal } from "temporal-polyfill";
+import type { CreateBookingInput } from "./domain.js";
 
 export type CreateBookingValidation =
-  | { ok: true; value: NewBookingInput }
+  | { ok: true; value: CreateBookingInput }
   | { ok: false; message: string };
-
-/** The subset of a booking the request supplies; the handler resolves the rest. */
-type NewBookingInput = {
-  meetingTypeId: string;
-  startAt: Temporal.Instant;
-  attendeeName: string;
-  attendeeEmail: string;
-  description?: string;
-};
 
 type JsonRecord = Record<string, unknown>;
 
@@ -101,7 +93,7 @@ export function parseCreateBookingRequest(body: unknown): CreateBookingValidatio
     }
   }
 
-  const value: NewBookingInput = { meetingTypeId, startAt: start, attendeeName, attendeeEmail };
+  const value: CreateBookingInput = { meetingTypeId, startAt: start, attendeeName, attendeeEmail };
 
   if (description !== undefined) {
     value.description = description;

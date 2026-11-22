@@ -5,7 +5,6 @@ import {
   createBookingUseCases,
   MeetingTypeNotFoundError,
   SlotNotAvailableError,
-  type CreateBookingInput,
 } from "./bookings/use-cases.js";
 import { parseCreateBookingRequest } from "./bookings/validation.js";
 import type { Clock } from "./clock.js";
@@ -53,6 +52,26 @@ function slotNotAvailable() {
     statusCode: 409 as const,
     body: apiError("slot_not_available", "Slot is not available"),
   };
+}
+
+function meetingTypeNotFoundResponse(error: unknown) {
+  if (error instanceof MeetingTypeNotFoundError) {
+    return meetingTypeNotFound();
+  }
+
+  return undefined;
+}
+
+function slotNotAvailableResponse(error: unknown) {
+  if (error instanceof SlotNotAvailableError) {
+    return slotNotAvailable();
+  }
+
+  return undefined;
+}
+
+function useCaseErrorResponse(error: unknown) {
+  return meetingTypeNotFoundResponse(error) ?? slotNotAvailableResponse(error);
 }
 
 function toWireMeetingType(meetingType: MeetingType): WireMeetingType {
@@ -138,11 +157,13 @@ export function createRequestHandler({
       try {
         result = await bookingUseCases.listSlots(id);
       } catch (error) {
-        if (error instanceof MeetingTypeNotFoundError) {
-          return meetingTypeNotFound();
+        const response = meetingTypeNotFoundResponse(error);
+
+        if (response === undefined) {
+          throw error;
         }
 
-        throw error;
+        return response;
       }
 
       const body: SlotList = {
@@ -178,34 +199,21 @@ export function createRequestHandler({
         };
       }
 
-      const input: CreateBookingInput = {
-        meetingTypeId: parsed.value.meetingTypeId,
-        attendeeName: parsed.value.attendeeName,
-        attendeeEmail: parsed.value.attendeeEmail,
-        startAt: parsed.value.startAt,
-      };
-
-      if (parsed.value.description !== undefined) {
-        input.description = parsed.value.description;
-      }
-
       try {
-        const booking = await bookingUseCases.createBooking(input);
+        const booking = await bookingUseCases.createBooking(parsed.value);
 
         return {
           statusCode: 201 as const,
           body: toWireBooking(booking),
         };
       } catch (error) {
-        if (error instanceof MeetingTypeNotFoundError) {
-          return meetingTypeNotFound();
+        const response = useCaseErrorResponse(error);
+
+        if (response === undefined) {
+          throw error;
         }
 
-        if (error instanceof SlotNotAvailableError) {
-          return slotNotAvailable();
-        }
-
-        throw error;
+        return response;
       }
     },
   };

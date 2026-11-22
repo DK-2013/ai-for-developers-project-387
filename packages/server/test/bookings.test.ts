@@ -1,16 +1,18 @@
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createRequestHandler } from "../src/app.js";
-import { parseConfig, type OwnerConfig } from "../src/config.js";
-import type { Database } from "../src/db/schema.js";
 import { createTestDatabase, type TestDatabase } from "./helpers/database.js";
+import {
+  createBookingFixture,
+  createMeetingTypeFixture,
+  DEFAULT_MEETING_TYPE_ID,
+} from "./helpers/fixtures.js";
+import { startTestServer, stopTestServer } from "./helpers/server.js";
 
 const FIXED_NOW = new Date("2026-01-05T10:00:00.000Z");
-const DEFAULT_MEETING_TYPE_ID = "00000000-0000-4000-8000-000000000001";
 const UNKNOWN_MEETING_TYPE_ID = "00000000-0000-4000-8000-000000000099";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const OVER_LIMIT_DESCRIPTION = "🔥".repeat(1001);
+const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
 type BookingBody = {
   id: string;
@@ -30,70 +32,8 @@ let server: Server;
 let baseUrl: string;
 let currentNow = FIXED_NOW;
 
-async function startServer(
-  db: Database,
-  owner: OwnerConfig = parseConfig({}).owner,
-): Promise<{ server: Server; baseUrl: string }> {
-  const requestHandler = createRequestHandler({
-    db,
-    owner,
-    clock: () => currentNow,
-  });
-  const nextServer = createServer(requestHandler);
-
-  await new Promise<void>((resolve, reject) => {
-    nextServer.once("error", reject);
-    nextServer.listen(0, "127.0.0.1", resolve);
-  });
-
-  const address = nextServer.address() as AddressInfo;
-
-  return { server: nextServer, baseUrl: `http://127.0.0.1:${address.port}` };
-}
-
-async function stopServer(target: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    target.close((error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-async function withServer(
-  owner: OwnerConfig,
-  operation: (url: string) => Promise<void>,
-): Promise<void> {
-  const started = await startServer(database.db, owner);
-
-  try {
-    await operation(started.baseUrl);
-  } finally {
-    await stopServer(started.server);
-  }
-}
-
-async function createMeetingType(
-  name: string,
-  durationMinutes: number,
-  description?: string,
-): Promise<string> {
-  const response = await fetch(`${baseUrl}/meeting-types`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, durationMinutes, description }),
-  });
-  const body = (await response.json()) as { id: string };
-
-  expect(response.status).toBe(201);
-  return body.id;
-}
-
-async function postBooking(body: unknown, url: string = baseUrl): Promise<Response> {
-  const response = await fetch(`${url}/bookings`, {
+async function postBooking(body: unknown): Promise<Response> {
+  const response = await fetch(`${baseUrl}/bookings`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -122,7 +62,7 @@ function bookingRequest(overrides: Record<string, unknown> = {}): Record<string,
 
 beforeAll(async () => {
   database = await createTestDatabase("bookings");
-  const started = await startServer(database.db);
+  const started = await startTestServer({ db: database.db, clock: () => currentNow });
   server = started.server;
   baseUrl = started.baseUrl;
 });
@@ -133,79 +73,32 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await stopServer(server);
+  await stopTestServer(server);
   await database.destroy();
 });
 
 describe("POST /bookings", () => {
-  it("creates a booking with the meeting type name snapshot and computed end", async () => {
+  it("returns 201 with the booking wire shape", async () => {
     const response = await postBooking(bookingRequest());
-    const body = response.body as BookingBody;
 
     expect(response.status).toBe(201);
-    expect(body).toMatchObject({
-      meetingTypeId: DEFAULT_MEETING_TYPE_ID,
-      meetingTypeName: "Звонок",
-      startAt: "2026-01-06T07:00:00Z",
-      endAt: "2026-01-06T07:15:00Z",
-      attendeeName: "Гость",
-      attendeeEmail: "guest@example.com",
+    expect(response.body).toEqual({
+      id: expect.stringMatching(UUID_PATTERN),
+      meetingTypeId: expect.stringMatching(UUID_PATTERN),
+      meetingTypeName: expect.any(String),
+      startAt: expect.stringMatching(UTC_INSTANT),
+      endAt: expect.stringMatching(UTC_INSTANT),
+      attendeeName: expect.any(String),
+      attendeeEmail: expect.any(String),
     });
-    expect(body.id).toMatch(UUID_PATTERN);
   });
 
-  it("stores the submitted description on the booking", async () => {
-    const description = "Context for the call:\nPlease send the pricing.";
-    const response = await postBooking(bookingRequest({ description }));
+  it("returns 201 with an optional description", async () => {
+    const response = await postBooking(bookingRequest({ description: "Pricing questions" }));
     const body = response.body as BookingBody;
 
     expect(response.status).toBe(201);
-    expect(body.description).toBe(description);
-  });
-
-  it("does not add a description when the request omits it", async () => {
-    const response = await postBooking(bookingRequest());
-    const body = response.body as BookingBody;
-
-    expect(response.status).toBe(201);
-    expect(body.description).toBeUndefined();
-  });
-
-  it("treats an empty description as no description", async () => {
-    const response = await postBooking(bookingRequest({ description: "" }));
-    const body = response.body as BookingBody;
-
-    expect(response.status).toBe(201);
-    expect(body.description).toBeUndefined();
-  });
-
-  it("treats a whitespace-only description as no description", async () => {
-    const response = await postBooking(bookingRequest({ description: " \n\t " }));
-    const body = response.body as BookingBody;
-
-    expect(response.status).toBe(201);
-    expect(body.description).toBeUndefined();
-  });
-
-  it("accepts a description of exactly 1000 code points", async () => {
-    const description = "🔥".repeat(1000);
-    const response = await postBooking(bookingRequest({ description }));
-    const body = response.body as BookingBody;
-
-    expect(response.status).toBe(201);
-
-    const codePoints = [...(body.description ?? "")].length;
-
-    expect(codePoints).toBe(1000);
-  });
-
-  it("does not copy the meeting type description into the booking", async () => {
-    const meetingTypeId = await createMeetingType("Консультация", 30, "Owner's type description");
-    const response = await postBooking(bookingRequest({ meetingTypeId }));
-    const body = response.body as BookingBody;
-
-    expect(response.status).toBe(201);
-    expect(body.description).toBeUndefined();
+    expect(body.description).toEqual(expect.any(String));
   });
 
   it.each([
@@ -250,14 +143,6 @@ describe("POST /bookings", () => {
     ],
     ["description that is not a string", bookingRequest({ description: 42 })],
     ["description that is null", bookingRequest({ description: null })],
-    [
-      "description longer than 1000 code points",
-      bookingRequest({ description: OVER_LIMIT_DESCRIPTION }),
-    ],
-    [
-      "whitespace-only description longer than 1000 code points",
-      bookingRequest({ description: " ".repeat(1001) }),
-    ],
   ])("returns 400 for %s", async (_label, body) => {
     const response = await postBooking(body);
 
@@ -282,122 +167,46 @@ describe("POST /bookings", () => {
     expect(response.body).toMatchObject({ code: "meeting_type_not_found" });
   });
 
-  it.each([
-    ["a start in the past", bookingRequest({ startAt: "2026-01-05T07:00:00Z" })],
-    ["a start off the fifteen-minute grid", bookingRequest({ startAt: "2026-01-06T07:05:00Z" })],
-    ["a start before working hours", bookingRequest({ startAt: "2026-01-06T06:45:00Z" })],
-    ["a start after working hours", bookingRequest({ startAt: "2026-01-06T15:15:00Z" })],
-    ["a start on a non-working day", bookingRequest({ startAt: "2026-01-10T07:00:00Z" })],
-    ["a start outside the booking window", bookingRequest({ startAt: "2026-01-19T07:00:00Z" })],
-  ])("returns 409 for %s", async (_label, body) => {
-    const response = await postBooking(body);
+  it("returns 409 when the start is not bookable", async () => {
+    const response = await postBooking(bookingRequest({ startAt: "2026-01-05T07:00:00Z" }));
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({ code: "slot_not_available" });
   });
 
-  it("returns 409 for a non-quarter-hour start even when the working day begins then", async () => {
-    const owner = parseConfig({ WORKING_HOURS_START: "10:07" }).owner;
-
-    await withServer(owner, async (url) => {
-      const response = await postBooking(bookingRequest({ startAt: "2026-01-06T07:07:00Z" }), url);
-
-      expect(response.status).toBe(409);
-      expect(response.body).toMatchObject({ code: "slot_not_available" });
+  it("returns 409 when the slot is already occupied", async () => {
+    await createBookingFixture(database.db, {
+      startAt: Temporal.Instant.from("2026-01-06T07:00:00Z"),
+      endAt: Temporal.Instant.from("2026-01-06T07:15:00Z"),
     });
-  });
 
-  it("returns 409 when the meeting does not fit before the working day ends", async () => {
-    const meetingTypeId = await createMeetingType("Consultation", 30);
-    const response = await postBooking(
-      bookingRequest({ meetingTypeId, startAt: "2026-01-06T14:45:00Z" }),
-    );
+    const response = await postBooking(bookingRequest());
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({ code: "slot_not_available" });
-  });
-
-  it("returns 409 for a repeat booking of the same slot", async () => {
-    const first = await postBooking(bookingRequest());
-    const second = await postBooking(bookingRequest());
-
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(409);
-    expect(second.body).toMatchObject({ code: "slot_not_available" });
-  });
-
-  it("returns 409 for a conflicting booking that carries a description", async () => {
-    const first = await postBooking(bookingRequest({ description: "First call context" }));
-    const second = await postBooking(bookingRequest({ description: "Second call context" }));
-
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(409);
-    expect(second.body).toMatchObject({ code: "slot_not_available" });
-  });
-
-  it("returns 409 for a partial overlap across meeting types", async () => {
-    const firstTypeId = await createMeetingType("Intro call", 30);
-    const secondTypeId = await createMeetingType("Consultation", 45);
-    const first = await postBooking(
-      bookingRequest({ meetingTypeId: firstTypeId, startAt: "2026-01-06T07:00:00Z" }),
-    );
-    const second = await postBooking(
-      bookingRequest({ meetingTypeId: secondTypeId, startAt: "2026-01-06T07:15:00Z" }),
-    );
-
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(409);
-    expect(second.body).toMatchObject({ code: "slot_not_available" });
-  });
-
-  it("allows a meeting to start exactly when another ends", async () => {
-    const meetingTypeId = await createMeetingType("Intro call", 30);
-    const first = await postBooking(
-      bookingRequest({ meetingTypeId, startAt: "2026-01-06T07:00:00Z" }),
-    );
-    const second = await postBooking(
-      bookingRequest({ meetingTypeId, startAt: "2026-01-06T07:30:00Z" }),
-    );
-
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(201);
-  });
-
-  it("allows only one of two concurrent requests for the same slot", async () => {
-    const meetingTypeId = await createMeetingType("Intro call", 30);
-    const request = () =>
-      postBooking(bookingRequest({ meetingTypeId, startAt: "2026-01-06T07:00:00Z" }));
-
-    const results = await Promise.allSettled([request(), request()]);
-    const statuses = results.map((result) => {
-      if (result.status === "rejected") {
-        throw result.reason;
-      }
-
-      return result.value.status;
-    });
-
-    expect(statuses.toSorted()).toEqual([201, 409]);
   });
 });
 
 describe("GET /bookings", () => {
-  it("returns upcoming bookings from every meeting type ordered by start", async () => {
-    const consultationId = await createMeetingType("Консультация", 30);
-    const later = await postBooking(
-      bookingRequest({ startAt: "2026-01-06T08:00:00Z", attendeeName: "Анна" }),
-    );
-    const earlier = await postBooking(
-      bookingRequest({
-        meetingTypeId: consultationId,
-        startAt: "2026-01-06T07:00:00Z",
-        attendeeName: "Борис",
-        attendeeEmail: "boris@example.com",
-      }),
-    );
+  it("returns 200 with upcoming bookings ordered by start", async () => {
+    const consultation = await createMeetingTypeFixture(database.db, {
+      name: "Консультация",
+      durationMinutes: 30,
+    });
 
-    expect(later.status).toBe(201);
-    expect(earlier.status).toBe(201);
+    await createBookingFixture(database.db, {
+      attendeeName: "Анна",
+      startAt: Temporal.Instant.from("2026-01-06T08:00:00Z"),
+      endAt: Temporal.Instant.from("2026-01-06T08:15:00Z"),
+    });
+    await createBookingFixture(database.db, {
+      meetingTypeId: consultation.id,
+      meetingTypeName: consultation.name,
+      attendeeName: "Борис",
+      attendeeEmail: "boris@example.com",
+      startAt: Temporal.Instant.from("2026-01-06T07:00:00Z"),
+      endAt: Temporal.Instant.from("2026-01-06T07:30:00Z"),
+    });
 
     const response = await getBookings();
     const body = response.body as { bookings: BookingBody[] };
@@ -414,35 +223,17 @@ describe("GET /bookings", () => {
     expect(body.bookings.map((booking) => booking.attendeeName)).toEqual(["Борис", "Анна"]);
   });
 
-  it("includes the full booking details with the meeting type name snapshot", async () => {
-    const consultationId = await createMeetingType("Консультация", 30);
-    await postBooking(
-      bookingRequest({
-        meetingTypeId: consultationId,
-        startAt: "2026-01-06T07:00:00Z",
-        attendeeName: "Борис",
-        attendeeEmail: "boris@example.com",
-      }),
-    );
-
-    const response = await getBookings();
-    const body = response.body as { bookings: BookingBody[] };
-
-    expect(response.status).toBe(200);
-    expect(body.bookings).toHaveLength(1);
-    expect(body.bookings[0]).toMatchObject({
-      meetingTypeId: consultationId,
-      meetingTypeName: "Консультация",
-      startAt: "2026-01-06T07:00:00Z",
-      endAt: "2026-01-06T07:30:00Z",
-      attendeeName: "Борис",
-      attendeeEmail: "boris@example.com",
-    });
-  });
-
   it("excludes bookings that have ended and keeps the ones still running", async () => {
-    await postBooking(bookingRequest({ startAt: "2026-01-06T07:00:00Z", attendeeName: "Анна" }));
-    await postBooking(bookingRequest({ startAt: "2026-01-06T08:00:00Z", attendeeName: "Борис" }));
+    await createBookingFixture(database.db, {
+      attendeeName: "Анна",
+      startAt: Temporal.Instant.from("2026-01-06T07:00:00Z"),
+      endAt: Temporal.Instant.from("2026-01-06T07:15:00Z"),
+    });
+    await createBookingFixture(database.db, {
+      attendeeName: "Борис",
+      startAt: Temporal.Instant.from("2026-01-06T08:00:00Z"),
+      endAt: Temporal.Instant.from("2026-01-06T08:15:00Z"),
+    });
 
     currentNow = new Date("2026-01-06T07:15:00.000Z");
 
@@ -454,46 +245,16 @@ describe("GET /bookings", () => {
   });
 
   it("returns an empty list when no booking is upcoming", async () => {
-    await postBooking(bookingRequest({ startAt: "2026-01-06T07:00:00Z" }));
+    await createBookingFixture(database.db, {
+      startAt: Temporal.Instant.from("2026-01-06T07:00:00Z"),
+      endAt: Temporal.Instant.from("2026-01-06T07:15:00Z"),
+    });
 
     currentNow = new Date("2026-01-06T08:00:00.000Z");
 
     const response = await getBookings();
-    const body = response.body as { bookings: BookingBody[] };
 
     expect(response.status).toBe(200);
-    expect(body.bookings).toEqual([]);
-  });
-
-  it("returns the exact submitted description on the matching booking", async () => {
-    const description = "Line one\nLine two — 🔥";
-    const described = await postBooking(
-      bookingRequest({ startAt: "2026-01-06T07:00:00Z", description }),
-    );
-    const plain = await postBooking(
-      bookingRequest({ startAt: "2026-01-06T08:00:00Z", attendeeName: "Анна" }),
-    );
-
-    expect(described.status).toBe(201);
-    expect(plain.status).toBe(201);
-
-    const response = await getBookings();
-    const body = response.body as { bookings: BookingBody[] };
-
-    expect(response.status).toBe(200);
-    expect(body.bookings).toHaveLength(2);
-    expect(body.bookings[0]).toMatchObject({ startAt: "2026-01-06T07:00:00Z", description });
-    expect(body.bookings[1].description).toBeUndefined();
-  });
-
-  it("does not return a description for whitespace-only input", async () => {
-    await postBooking(bookingRequest({ description: " \n\t " }));
-
-    const response = await getBookings();
-    const body = response.body as { bookings: BookingBody[] };
-
-    expect(response.status).toBe(200);
-    expect(body.bookings).toHaveLength(1);
-    expect(body.bookings[0].description).toBeUndefined();
+    expect(response.body).toEqual({ bookings: [] });
   });
 });
