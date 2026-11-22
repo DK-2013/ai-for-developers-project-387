@@ -1,13 +1,11 @@
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createRequestHandler } from "../src/app.js";
-import { parseConfig } from "../src/config.js";
-import { schema, type Database } from "../src/db/schema.js";
+import { schema } from "../src/db/schema.js";
 import { seedDefaultMeetingType } from "../src/db/seed.js";
 import { createTestDatabase, type TestDatabase } from "./helpers/database.js";
+import { startTestServer, stopTestServer } from "./helpers/server.js";
 
 const FIXED_NOW = new Date("2026-01-01T10:00:00.000Z");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -21,36 +19,6 @@ const DEFAULT_MEETING_TYPE = {
 let database: TestDatabase;
 let server: Server;
 let baseUrl: string;
-
-async function startServer(db: Database): Promise<{ server: Server; baseUrl: string }> {
-  const requestHandler = createRequestHandler({
-    db,
-    owner: parseConfig({}).owner,
-    clock: () => FIXED_NOW,
-  });
-  const nextServer = createServer(requestHandler);
-
-  await new Promise<void>((resolve, reject) => {
-    nextServer.once("error", reject);
-    nextServer.listen(0, "127.0.0.1", resolve);
-  });
-
-  const address = nextServer.address() as AddressInfo;
-
-  return { server: nextServer, baseUrl: `http://127.0.0.1:${address.port}` };
-}
-
-async function stopServer(target: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    target.close((error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
 
 async function postMeetingType(body: unknown): Promise<{ status: number; body: unknown }> {
   const payload = JSON.stringify(body);
@@ -83,7 +51,7 @@ async function listMeetingTypes(url: string = baseUrl): Promise<unknown> {
 
 beforeAll(async () => {
   database = await createTestDatabase("app");
-  const started = await startServer(database.db);
+  const started = await startTestServer({ db: database.db, clock: () => FIXED_NOW });
   server = started.server;
   baseUrl = started.baseUrl;
 });
@@ -93,7 +61,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await stopServer(server);
+  await stopTestServer(server);
   await database.destroy();
 });
 
@@ -166,7 +134,7 @@ describe("HTTP surface", () => {
     const created = await postMeetingType({ name: "Persisted", durationMinutes: 30 });
     const newPool = new Pool({ connectionString: database.url });
     const newDb = drizzle(newPool, { schema });
-    const restarted = await startServer(newDb);
+    const restarted = await startTestServer({ db: newDb, clock: () => FIXED_NOW });
 
     try {
       const body = await listMeetingTypes(restarted.baseUrl);
@@ -174,7 +142,7 @@ describe("HTTP surface", () => {
 
       expect(meetingTypes).toEqual([DEFAULT_MEETING_TYPE, created.body]);
     } finally {
-      await stopServer(restarted.server);
+      await stopTestServer(restarted.server);
       await newPool.end();
     }
   });

@@ -6,8 +6,10 @@ import { bookingWindow } from "../domain/time/index.js";
 import type { MeetingTypeRepository } from "../meeting-types/repository.js";
 import { isValidMeetingTypeId } from "../meeting-types/validation.js";
 import type { SlotRepository } from "../slots/repository.js";
-import type { Booking, NewBooking } from "./domain.js";
+import type { Booking, CreateBookingInput, NewBooking } from "./domain.js";
 import { BookingConflictError, type BookingRepository } from "./repository.js";
+
+export type { CreateBookingInput } from "./domain.js";
 
 /** The meeting type cannot be resolved, whatever the reason. */
 export class MeetingTypeNotFoundError extends Error {
@@ -24,15 +26,6 @@ export class SlotNotAvailableError extends Error {
     this.name = "SlotNotAvailableError";
   }
 }
-
-/** What a guest supplies to book a slot, in domain terms. */
-export type CreateBookingInput = {
-  meetingTypeId: string;
-  attendeeName: string;
-  attendeeEmail: string;
-  startAt: Temporal.Instant;
-  description?: string;
-};
 
 export type BookingUseCases = {
   listSlots(meetingTypeId: string): Promise<SlotEngineResult>;
