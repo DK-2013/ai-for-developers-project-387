@@ -73,7 +73,7 @@ jobs:
           test -n "$(find packages/server/src/generated packages/web/src/sdk -type f -print -quit)"
 
       - name: Install Playwright browsers
-        run: playwright install --with-deps chromium
+        run: pnpm --filter @calendar/web exec playwright install --with-deps chromium
 
       - name: Run the full gate
         # PostgreSQL comes from the service above, so skip the db:up and codegen

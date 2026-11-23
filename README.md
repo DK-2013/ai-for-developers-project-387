@@ -159,7 +159,8 @@ Chromium для Playwright и проходит сценарии из `packages/w
 владельцем, публичный список, навигацию и полный сценарий гостя (выбор типа, слота, форма,
 подтверждение). CI использует PostgreSQL как сервис, выставляет `MISE_TASK_SKIP_DEPENDS=1`
 (чтобы вложенный `mise run test` из `hk` не поднимал Docker) и запускает `mise run --skip-deps verify`
-после `pnpm codegen`; браузер ставится командой `playwright install --with-deps chromium`.
+после `pnpm codegen`; браузер ставится командой `pnpm --filter @calendar/web exec playwright install --with-deps chromium`
+из версии Playwright, закреплённой в `packages/web`.
 Ручной чек-лист для проверки UI через MCP описан в `docs/agents/browser-checks.md`.
 
 ## Lighthouse CI

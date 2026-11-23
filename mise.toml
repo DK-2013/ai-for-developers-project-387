@@ -8,7 +8,6 @@ pnpm = "12.18.0"
 "npm:@tobilu/qmd" = "latest"
 "npm:@playwright/mcp" = "0.0.84"
 "npm:chrome-devtools-mcp" = "1.12.0"
-"npm:playwright" = "1.65.0"
 hk = "2.10.0"
 jactionlint = "2.4.0"
 betterleaks = "1.9.0"
@@ -60,15 +59,18 @@ run = "pnpm test"
 [tasks."test:e2e"]
 description = "Run Playwright end-to-end tests against the web app and API"
 depends = ["db:up"]
-run = ["playwright install chromium", "pnpm --filter @calendar/web test:e2e"]
+run = [
+  "pnpm --filter @calendar/web exec playwright install chromium",
+  "pnpm --filter @calendar/web test:e2e",
+]
 
 [tasks."mcp:browsers"]
 description = "Install the Chromium builds used by Playwright and the browser MCP servers"
 run = [
   # @playwright/mcp@0.0.84 bundles Playwright 1.65.0-alpha, which needs chromium-1252.
   "playwright-mcp install-browser chrome-for-testing",
-  # playwright and @playwright/test 1.65.0 need chromium-1254.
-  "playwright install chromium",
+  # @playwright/test pins the Chromium build in packages/web.
+  "pnpm --filter @calendar/web exec playwright install chromium",
 ]
 
 [tasks."mcp:check"]
@@ -94,7 +96,7 @@ depends = ["codegen", "db:up"]
 run = [
   "hk check --all",
   "mise run build",
-  "playwright install chromium",
+  "pnpm --filter @calendar/web exec playwright install chromium",
   "pnpm --filter @calendar/web test:e2e",
 ]
 
