@@ -30,8 +30,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     concurrency:
-      group: oc-budget-ledger-${{ github.repository }}
+      # Same per-PR group as the record job in interactive.yml, so this entry
+      # runs after that job dispatches it. `queue: max` keeps pending entries.
+      group: oc-budget-ledger-${{ github.repository }}-${{ inputs.pr }}
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Record the admitted attempt
         env:

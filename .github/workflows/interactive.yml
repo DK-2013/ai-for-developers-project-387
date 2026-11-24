@@ -170,8 +170,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: oc-budget-ledger-${{ github.repository }}
+      # Serialize this PR's record job with its ledger job. `queue: max`
+      # prevents a newer pending job from replacing an older one.
+      group: oc-budget-ledger-${{ github.repository }}-${{ needs.opencode.outputs.pr }}
       cancel-in-progress: false
+      queue: max
     permissions:
       # Re-read this run's steps (read) and dispatch the ledger entry (write).
       # Write implies read for the Actions scope. These tokens never reach the
