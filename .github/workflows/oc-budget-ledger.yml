@@ -29,6 +29,9 @@ jobs:
   record:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    concurrency:
+      group: oc-budget-ledger-${{ github.repository }}
+      cancel-in-progress: false
     steps:
       - name: Record the admitted attempt
         env:

@@ -88,7 +88,7 @@ gh workflow run oc-budget-ledger.yml \
   -f pr="$PR_NUMBER" -f run="$RUN_ID" -f attempt="$RUN_ATTEMPT"
 
 # Wait until the entry is visible so the next queued /oc counts it.
-for _ in $(seq 1 30); do
+for _ in $(seq 1 5); do
   if ledger_has; then
     echo "::notice::Ledger entry recorded for PR #$PR_NUMBER."
     exit 0
