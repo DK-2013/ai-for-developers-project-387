@@ -29,14 +29,13 @@ pull request.
 - **Подготовка:** workflow включает corepack, ставит зависимости (`pnpm install --frozen-lockfile`)
   и `commit-msg`-хук с `commitlint`. Mise в runner'е нет, поэтому агент работает pnpm-командами, а
   сообщение коммита проверяется до push.
-- **Права (по job'ам):** `gate` — только `actions: read` и `pull-requests: read`, без секретов;
-  он читает историю бюджета и не может её изменить. `opencode` — `contents: read`, `id-token: write`
-  для обмена OIDC на токен OpenCode GitHub App (этим токеном агент отвечает в треде и создаёт ветки
-  и pull request), плюс `issues: write` и `pull-requests: write` для `gh` внутри агентской сессии,
-  где `GH_TOKEN` — это `GITHUB_TOKEN`. `record` — единственный job с `actions: write` и
-  `contents: write`; он запускается после агента и его токен агенту не виден. `report` —
-  `issues: write` и `pull-requests: write`, без секретов и без модели. `actions/checkout` работает
-  с `persist-credentials: false`.
+- **Права (по job'ам):** `opencode` — `contents: read`, `actions: read` (preflight читает историю
+  бюджета и не может её изменить) и `id-token: write` для обмена OIDC на токен OpenCode GitHub App
+  (этим токеном агент отвечает в треде и создаёт ветки и pull request), плюс `issues: write` и
+  `pull-requests: write` для `gh` внутри агентской сессии, где `GH_TOKEN` — это `GITHUB_TOKEN`.
+  `record` — единственный job с `actions: write` и `contents: write`; он запускается после агента и
+  его токен агенту не виден. `report` — `issues: write` и `pull-requests: write`, без секретов и без
+  модели. `actions/checkout` работает с `persist-credentials: false`.
 - **Лимиты:** таймаут job — 30 минут; `concurrency` на issue или PR: одновременно выполняется
   один запуск, следующий ждёт в очереди, текущий не отменяется.
 
@@ -48,17 +47,20 @@ pull request.
   (`run-name` начинается с `oc-chat-budget PR #<N>`) соответствует одной допущенной попытке, а
   израсходованный бюджет PR — число таких прогонов. Счётчик не хранится ни в комментарии, ни в файле:
   агент и обычные пользователи не могут его ни изменить, ни подделать, потому что у их токенов нет
-  `actions: write`. Запрос сверх лимита не доходит до модели: job `gate` (только `actions: read` и
-  `pull-requests: read`, без секретов) пропускает модель, а job `report` публикует короткий отказ.
-- Учитывается каждая **допущенная** попытка, включая ре-раны: запись в ledger создаёт job `record`
-  после того, как отработал шаг-маркер `Mark agent start` (он стоит прямо перед запуском модели), и
-  `record` перечитывает этот шаг через API. Поэтому сбой checkout, установки или отсутствие ключа до
-  маркера попытку не тратит, а отмена, таймаут или ошибка после маркера — тратит.
+  `actions: write`. Запрос сверх лимита не доходит до модели: job `opencode` начинается с шага
+  `Preflight`, который запускает `scripts/oc-budget.sh`, скопированный из default branch до checkout.
+  Поэтому точечный rerun job'а модели перепроверяет бюджет, а PR-ветка не может изменить проверку.
+  Job `report` публикует короткий отказ.
+- Учитывается каждая **допущенная** попытка: запись в ledger создаёт job `record` после `opencode`,
+  если шаг-маркер `Mark agent start` (он стоит прямо перед запуском модели) завершился успешно.
+  `record` перечитывает conclusion этого шага через API. Отмена после допуска, но до маркера, тоже
+  тратит попытку; сбой checkout, установки или отсутствие ключа до маркера — нет. Rerun только job'а
+  `record` не создаёт вторую запись для того же запуска модели.
 - Запись создаётся только для pull request; в обычном issue ledger-прогон не появляется.
-- Нецелое значение `OC_CHAT_LIMIT` — ошибка конфигурации: job `gate` завершается с ошибкой, модель
+- Нецелое значение `OC_CHAT_LIMIT` — ошибка конфигурации: `Preflight` завершается с ошибкой, модель
   не вызывается. Значение `0` полностью выключает запуск по команде.
-- Проверка перед запуском падает, если у OpenCode GitHub App обнаружен `actions: write`: иначе агент
-  мог бы удалять ledger-прогоны и сбрасывать бюджет.
+- `Preflight` падает, если у OpenCode GitHub App обнаружен `actions: write`: иначе агент мог бы
+  удалять ledger-прогоны и сбрасывать бюджет.
 - **Сброс:** удалите ledger-прогоны этого PR (Actions → `oc-budget-ledger` → Delete run, или
   `gh api -X DELETE repos/<owner>/<repo>/actions/runs/<id>`). Для удаления нужен `actions: write`,
   которого нет ни у агента, ни у обычных пользователей. Новый PR получает новый бюджет

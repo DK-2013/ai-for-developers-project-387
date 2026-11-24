@@ -4,12 +4,12 @@ ignores:
     file: .github/workflows/interactive.yml
     reason: >-
       issue_comment and pull_request_review_comment are the only supported entry
-      points for OpenCode; the gate job runs only for OWNER, MEMBER or
-      COLLABORATOR comments with no secrets and only actions:read plus
-      pull-requests:read, the agent job keeps contents:read and writes only
-      through the OpenCode GitHub App token obtained via OIDC, and the separate
-      record job (actions:write, contents:write) runs after the agent and never
-      exposes its token to it.
+      points for OpenCode; the opencode job runs only for OWNER, MEMBER or
+      COLLABORATOR comments, starts with a preflight budget check from a script
+      copied from the default branch before checkout, keeps contents:read and
+      actions:read, and writes only through the OpenCode GitHub App token
+      obtained via OIDC; the separate record job (actions:write, contents:write)
+      runs after the agent and never exposes its token to it.
     expires: "2027-05-13"
   - rule: dangerous-triggers
     file: .github/workflows/triage.yml

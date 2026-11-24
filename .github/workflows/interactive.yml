@@ -17,9 +17,9 @@ concurrency:
   queue: max
 
 jobs:
-  # Reads the budget and decides whether the model may run. Holds no secrets and
-  # cannot write anything, so the counter it reads is immutable to this job.
-  gate:
+  # Runs the agent. The budget check is the first step, before checkout, so a
+  # single-job rerun re-checks it and a PR branch cannot influence the check.
+  opencode:
     # Anyone can comment on a public repository. Only maintainers may start a
     # run, and only through their own comments rather than a bot's.
     if: |
@@ -33,129 +33,11 @@ jobs:
        contains(github.event.comment.body, ' /oc') ||
        contains(github.event.comment.body, ' /opencode'))
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      # The ledger workflow's run history is the budget. Reading it needs
-      # actions: read only; this job never writes it.
-      actions: read
-      # Read the PR to confirm it is not from a fork before any secret is used.
-      pull-requests: read
-    outputs:
-      allowed: ${{ steps.budget.outputs.allowed }}
-      reason: ${{ steps.budget.outputs.reason }}
-      used: ${{ steps.budget.outputs.used }}
-      limit: ${{ steps.budget.outputs.limit }}
-      pr: ${{ steps.budget.outputs.pr }}
-      on_pr: ${{ steps.budget.outputs.on_pr }}
-    steps:
-      - name: Check the chat budget
-        id: budget
-        timeout-minutes: 3
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
-          ON_PR: ${{ github.event.pull_request.number != null || github.event.issue.pull_request != null }}
-          LIMIT: ${{ vars.OC_CHAT_LIMIT || '3' }}
-        run: |
-          set -euo pipefail
-
-          # Emit a blocked decision in one place. The first argument is the
-          # reason; the second is the limit to display (defaults to 0).
-          fail_budget() {
-            {
-              echo "allowed=false"
-              echo "reason=${1:-infra}"
-              echo "used=0"
-              echo "limit=${2:-0}"
-            } >> "$GITHUB_OUTPUT"
-          }
-
-          # The model runs on an OpenCode GitHub App token exchanged via OIDC. If
-          # that App could write Actions, the agent could delete ledger runs and
-          # reset its own budget, so refuse to run at all.
-          if ! app_json=$(gh api apps/opencode-agent 2>/dev/null); then
-            echo "::error::Cannot read the opencode-agent App; refusing to run."
-            fail_budget infra 0
-            exit 1
-          fi
-          actions_perm=$(printf '%s' "$app_json" | jq -r '.permissions.actions // "none"')
-          if [ "$actions_perm" = "write" ]; then
-            echo "::error::The opencode-agent App has actions: write; it could reset the budget."
-            fail_budget infra "$LIMIT"
-            exit 1
-          fi
-
-          case "$LIMIT" in
-            ''|*[!0-9]*)
-              echo "::error::vars.OC_CHAT_LIMIT must be a non-negative integer, got '$LIMIT'"
-              fail_budget infra 0
-              exit 1
-              ;;
-          esac
-
-          echo "limit=$LIMIT" >> "$GITHUB_OUTPUT"
-          echo "pr=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-
-          if [ "$ON_PR" != "true" ]; then
-            {
-              echo "allowed=true"
-              echo "on_pr=false"
-              echo "used=0"
-            } >> "$GITHUB_OUTPUT"
-            echo "::notice::Chat budget applies to pull requests; issue #$PR_NUMBER is not budgeted"
-            exit 0
-          fi
-          echo "on_pr=true" >> "$GITHUB_OUTPUT"
-
-          # A pull request from a fork must never see the model key. Refuse it
-          # before the budget is even consulted; the agent never runs on it.
-          head_repo=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.repo.full_name')
-          if [ "$head_repo" != "$REPO" ]; then
-            {
-              echo "allowed=false"
-              echo "reason=fork"
-              echo "used=0"
-            } >> "$GITHUB_OUTPUT"
-            echo "::notice::PR #$PR_NUMBER is from fork '$head_repo'; refusing to run."
-            exit 0
-          fi
-
-          # A PR's used budget is the number of ledger runs created for it. Each
-          # admitted attempt creates exactly one; deleting them resets the count.
-          used=$(
-            gh api --paginate \
-              "repos/$REPO/actions/workflows/oc-budget-ledger.yml/runs?per_page=100" \
-              --jq ".workflow_runs[] | select(.display_title | startswith(\"oc-chat-budget PR #$PR_NUMBER \")) | .id" |
-              wc -l
-          )
-          used=$((used + 0))
-
-          if [ "$used" -ge "$LIMIT" ]; then
-            {
-              echo "allowed=false"
-              echo "reason=limit_exhausted"
-              echo "used=$used"
-            } >> "$GITHUB_OUTPUT"
-            echo "::notice::Chat budget exhausted: $used of $LIMIT for PR #$PR_NUMBER"
-          else
-            {
-              echo "allowed=true"
-              echo "reason="
-              echo "used=$used"
-            } >> "$GITHUB_OUTPUT"
-            echo "::notice::Chat budget: $used of $LIMIT used for PR #$PR_NUMBER"
-          fi
-
-  # Runs the agent. Keeps the scopes the agent's own `gh` needs, and contains no
-  # budget-write logic: it only marks that the model boundary was reached.
-  opencode:
-    needs: gate
-    if: needs.gate.outputs.allowed == 'true'
-    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+      # The preflight step reads the ledger and the PR. It never writes them.
+      actions: read
       # Exchanged through OIDC for an OpenCode GitHub App token. That token
       # writes comments and branches, so contents on GITHUB_TOKEN stays read-only.
       id-token: write
@@ -164,8 +46,49 @@ jobs:
       issues: write
       pull-requests: write
     outputs:
-      reason: ${{ steps.outcome.outputs.reason }}
+      budget_allowed: ${{ steps.preflight.outputs.allowed }}
+      budget_reason: ${{ steps.preflight.outputs.reason }}
+      used: ${{ steps.preflight.outputs.used }}
+      limit: ${{ steps.preflight.outputs.limit }}
+      on_pr: ${{ steps.preflight.outputs.on_pr }}
+      pr: ${{ steps.preflight.outputs.pr }}
+      model_started: ${{ steps.mark.outputs.started }}
+      agent_reason: ${{ steps.model.outputs.reason }}
     steps:
+      # The budget script is copied from the default branch before checkout.
+      # Running a copy from the PR branch would let that branch change the rule.
+      - name: Preflight
+        id: preflight
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          ON_PR: ${{ github.event.pull_request.number != null || github.event.issue.pull_request != null }}
+          LIMIT: ${{ vars.OC_CHAT_LIMIT || '3' }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # A missing key is an infrastructure failure, not a model call: it must
+          # be caught before the marker so the attempt is not spent.
+          if [ -z "${OPENCODE_API_KEY:-}" ]; then
+            echo "::error::The OPENCODE_API_KEY secret is not set."
+            exit 1
+          fi
+
+          script="$RUNNER_TEMP/oc-budget.sh"
+          if ! gh api \
+            "repos/$REPO/contents/scripts/oc-budget.sh?ref=$DEFAULT_BRANCH" \
+            --jq .content |
+            base64 -d > "$script"; then
+            echo "::error::Cannot read scripts/oc-budget.sh from $DEFAULT_BRANCH."
+            exit 1
+          fi
+
+          bash "$script" ledger
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -206,20 +129,10 @@ jobs:
           tar -xzf "$archive" -C "$HOME/.opencode/bin"
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
-      # A missing key is an infrastructure failure, not a model call: it must be
-      # caught before the marker so the attempt is not spent.
-      - name: Check model key
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-        run: |
-          if [ -z "${OPENCODE_API_KEY:-}" ]; then
-            echo "::error::The OPENCODE_API_KEY secret is not set."
-            exit 1
-          fi
-
       # The model boundary. The record job reads this step's conclusion from the
       # Actions API; it must stay the last step before the model call.
       - name: Mark agent start
+        id: mark
         run: echo "started=true" >> "$GITHUB_OUTPUT"
 
       - name: Run OpenCode
@@ -247,33 +160,13 @@ jobs:
           fi
           exit "$code"
 
-      # Runs even when an earlier step failed, so the report job learns whether
-      # the failure was before the model (infra) or after it started.
-      - name: Classify outcome
-        id: outcome
-        if: always()
-        env:
-          MODEL_OUTCOME: ${{ steps.model.outcome }}
-          MODEL_REASON: ${{ steps.model.outputs.reason }}
-        run: |
-          set -euo pipefail
-          reason=""
-          case "$MODEL_OUTCOME" in
-            success) ;;
-            failure) reason="${MODEL_REASON:-agent_failed}" ;;
-            *) reason=infra ;;
-          esac
-          echo "reason=$reason" >> "$GITHUB_OUTPUT"
-          if [ -n "$reason" ]; then
-            echo "::notice::Agent outcome: $reason"
-          fi
-
-  # The only job allowed to write Actions. It records the attempt only after the
-  # model boundary was reached, so preparation failures spend nothing while a
-  # cancellation, timeout or failure after the marker still spends the attempt.
+  # The only job allowed to write Actions. It records an admitted attempt when
+  # the model boundary was reached, or when the attempt was cancelled after
+  # admission but before the marker. A preparation failure before the marker
+  # spends nothing, and a rerun of only this job does not create a second entry.
   record:
-    needs: [gate, opencode]
-    if: always() && needs.opencode.result != 'skipped'
+    needs: opencode
+    if: always() && needs.opencode.result != 'skipped' && needs.opencode.outputs.on_pr == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -290,51 +183,93 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
-          ON_PR: ${{ needs.gate.outputs.on_pr }}
-          PR_NUMBER: ${{ needs.gate.outputs.pr }}
+          PR_NUMBER: ${{ needs.opencode.outputs.pr }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          if [ "${ON_PR:-false}" != "true" ] || [ -z "${PR_NUMBER:-}" ]; then
+          if [ -z "${PR_NUMBER:-}" ]; then
             echo "::notice::Not a pull request; no ledger entry is recorded."
             exit 0
           fi
 
-          # Did this attempt reach the model boundary? Read the marker step from
-          # the Actions API for this exact attempt. A job that timed out or was
-          # cancelled mid-model still has the marker recorded as success; a
-          # failure before it leaves the step skipped or absent.
-          marker=$(
+          info=$(
             gh api --paginate \
               "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "opencode") | .steps[]? | select(.name == "Mark agent start") | .conclusion' |
+              --jq '.jobs[] | select(.name == "opencode") | [
+                ([.steps[]? | select(.name == "Preflight") | .conclusion][0] // ""),
+                ([.steps[]? | select(.name == "Mark agent start") | .conclusion][0] // ""),
+                (.conclusion // ""),
+                (.started_at // "")
+              ] | @tsv' |
               head -n 1
           )
-          if [ "$marker" != "success" ]; then
-            echo "::notice::The model boundary was not reached (marker: ${marker:-absent}); no ledger entry."
+          IFS=$'\t' read -r preflight_result marker opencode_result opencode_started <<< "$info"
+
+          # The jobs endpoint also returns jobs from earlier attempts. If the
+          # opencode job started before this attempt, only this job was rerun
+          # (for example `record`), so it must not create a second entry.
+          attempt_started=$(
+            gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" \
+              --jq '.run_started_at'
+          )
+          if [ -n "$opencode_started" ] && [[ "$opencode_started" < "$attempt_started" ]]; then
+            echo "::notice::The opencode job did not run in attempt $RUN_ATTEMPT; no ledger entry."
             exit 0
           fi
 
-          expected="oc-chat-budget PR #$PR_NUMBER run $RUN_ID attempt $RUN_ATTEMPT"
-          count_entries() {
-            gh api --paginate \
-              "repos/$REPO/actions/workflows/oc-budget-ledger.yml/runs?per_page=100" \
-              --jq "[.workflow_runs[] | select(.display_title == \"$expected\")] | length" |
-              awk '{s+=$1} END{print s+0}'
+          if [ "$preflight_result" != "success" ]; then
+            echo "::notice::Preflight did not pass (${preflight_result:-absent}); no ledger entry."
+            exit 0
+          fi
+
+          if [ "$marker" != "success" ]; then
+            case "${opencode_result:-}" in
+              cancelled|skipped|"")
+                # Admission already happened; a cancellation before the marker
+                # is still a spent attempt. An empty result means the job was
+                # admitted but never appeared in this attempt.
+                echo "::notice::The admitted attempt stopped before the model boundary; recording it."
+                ;;
+              *)
+                echo "::notice::The model boundary was not reached (marker: ${marker:-absent}, opencode: ${opencode_result}); no ledger entry."
+                exit 0
+                ;;
+            esac
+          fi
+
+          # The ledger script owns the title format and the count, so the
+          # preflight and record jobs cannot drift apart.
+          script="$RUNNER_TEMP/oc-budget.sh"
+          if ! gh api \
+            "repos/$REPO/contents/scripts/oc-budget.sh?ref=$DEFAULT_BRANCH" \
+            --jq .content |
+            base64 -d > "$script"; then
+            echo "::error::Cannot read scripts/oc-budget.sh from $DEFAULT_BRANCH."
+            exit 1
+          fi
+          ledger_has() {
+            local result
+            if ! result=$(bash "$script" has); then
+              echo "::error::Cannot read the ledger."
+              exit 1
+            fi
+            [ "$result" = "true" ]
           }
 
-          before=$(count_entries)
-          if [ "$before" -gt 0 ]; then
+          if ledger_has; then
             echo "::notice::This attempt already has a ledger entry; nothing to record."
             exit 0
           fi
+          # The ledger workflow is the counter. This job dispatches it after
+          # the model (or an admitted cancellation). Maintainers reset the PR
+          # budget by deleting its ledger runs; the agent never has actions:write.
           gh workflow run oc-budget-ledger.yml \
             --repo "$REPO" --ref "$DEFAULT_BRANCH" \
             -f pr="$PR_NUMBER" -f run="$RUN_ID" -f attempt="$RUN_ATTEMPT"
 
           # Wait until the entry is visible, so the next queued /oc counts it.
           for _ in $(seq 1 30); do
-            if [ "$(count_entries)" -gt "$before" ]; then
+            if ledger_has; then
               echo "::notice::Ledger entry recorded for PR #$PR_NUMBER."
               exit 0
             fi
@@ -345,16 +280,13 @@ jobs:
 
   # Publishes why the model did not finish, without a model or secrets.
   report:
-    needs: [gate, opencode, record]
+    needs: [opencode, record]
     if: >-
-      always() && (
-        needs.gate.result == 'failure' ||
-        (needs.gate.result == 'success' && (
-          needs.gate.outputs.allowed != 'true' ||
-          needs.opencode.result == 'failure' ||
-          needs.opencode.result == 'cancelled' ||
-          needs.record.result == 'failure'
-        ))
+      always() && needs.opencode.result != 'skipped' &&
+      (
+        needs.opencode.result != 'success' ||
+        needs.opencode.outputs.agent_reason != '' ||
+        (needs.opencode.outputs.on_pr == 'true' && needs.record.result != 'success')
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -367,23 +299,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
-          ON_PR: ${{ needs.gate.outputs.on_pr }}
-          GATE_RESULT: ${{ needs.gate.result }}
-          GATE_ALLOWED: ${{ needs.gate.outputs.allowed }}
-          GATE_REASON: ${{ needs.gate.outputs.reason }}
-          USED: ${{ needs.gate.outputs.used }}
-          LIMIT: ${{ needs.gate.outputs.limit }}
+          ON_PR: ${{ needs.opencode.outputs.on_pr }}
+          BUDGET_ALLOWED: ${{ needs.opencode.outputs.budget_allowed }}
+          BUDGET_REASON: ${{ needs.opencode.outputs.budget_reason }}
+          USED: ${{ needs.opencode.outputs.used }}
+          LIMIT: ${{ needs.opencode.outputs.limit }}
           AGENT_RESULT: ${{ needs.opencode.result }}
-          AGENT_REASON: ${{ needs.opencode.outputs.reason }}
+          AGENT_REASON: ${{ needs.opencode.outputs.agent_reason }}
+          MODEL_STARTED: ${{ needs.opencode.outputs.model_started }}
           RECORD_RESULT: ${{ needs.record.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          if [ "$GATE_RESULT" = "failure" ]; then
-            reason=infra
-            detail="Сбой проверки бюджета перед вызовом модели (конфигурация лимита или права App). Модель не вызывалась."
-          elif [ "$GATE_ALLOWED" != "true" ]; then
-            case "${GATE_REASON:-limit_exhausted}" in
+          if [ "$BUDGET_ALLOWED" != "true" ]; then
+            case "${BUDGET_REASON:-infra}" in
               limit_exhausted)
                 reason=limit_exhausted
                 detail="Бюджет запросов к агенту на этот PR исчерпан (${USED:-?} из ${LIMIT:-?}). Модель не вызывалась."
@@ -394,24 +323,37 @@ jobs:
                 ;;
               *)
                 reason=infra
-                detail="Запуск отклонён проверкой перед вызовом модели."
+                detail="Сбой проверки перед вызовом модели (бюджет, права App или конфигурация лимита). Модель не вызывалась."
                 ;;
             esac
-          elif [ "$AGENT_RESULT" = "skipped" ]; then
-            reason=infra
-            detail="Агент не запустился после успешной проверки бюджета."
-          elif [ "$AGENT_RESULT" != "success" ]; then
-            reason=${AGENT_REASON:-agent_failed}
-            if [ "$reason" = "timeout" ]; then
-              detail="Агент не уложился в отведённое время и был остановлен."
-            else
-              detail="Агент завершился ошибкой или был остановлен."
+          elif [ "$AGENT_RESULT" = "success" ]; then
+            if [ "${ON_PR:-false}" != "true" ] || [ "$RECORD_RESULT" = "success" ]; then
+              exit 0
             fi
-          elif [ "$RECORD_RESULT" != "success" ]; then
             reason=infra
             detail="Не удалось записать попытку в бюджет; счётчик мог не увеличиться."
+          elif [ "$AGENT_RESULT" = "cancelled" ]; then
+            reason=infra
+            detail="Агент был остановлен после допуска; попытка учтена в бюджете."
           else
-            exit 0
+            case "${AGENT_REASON:-}:${MODEL_STARTED:-}" in
+              timeout:*)
+                reason=timeout
+                detail="Агент не уложился в отведённое время и был остановлен."
+                ;;
+              :true)
+                reason=agent_failed
+                detail="Агент завершился ошибкой после старта модели."
+                ;;
+              :*)
+                reason=infra
+                detail="Сбой подготовки до вызова модели."
+                ;;
+              *)
+                reason="$AGENT_REASON"
+                detail="Агент завершился ошибкой или был остановлен."
+                ;;
+            esac
           fi
 
           sha=$GITHUB_SHA
