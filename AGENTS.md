@@ -9,6 +9,9 @@ Call Calendar — a pnpm monorepo with a TypeSpec API contract (`packages/spec`)
 - **The aggregate check command is `mise run check`.** It must pass before a change is done. CI runs `mise run verify` (the full gate with build and browser tests). Generated files are never edited by hand.
 - **Generated code is read-only.** `packages/spec/openapi.json`, `packages/server/src/generated/`, and `packages/web/src/sdk/` are produced by `mise run codegen` from `packages/spec/main.tsp`. Change the source, regenerate, and commit only the source change.
 - **Lint rules are never disabled to get a change through.** Exceptions are narrow, carry a `review YYYY-MM-DD: <reason>` marker, and need a human decision. See `CODING_STANDARDS.md` for the exception mechanism.
+- **Use the easement skill** before adding a file or an import and whenever `easement check` fails.
+- **After changing code, run `easement check`; it must exit 0.**
+- **Never edit `easement.yml`, regenerate the baseline or add an `easement:disable` comment without asking a human.**
 
 ## Rules
 

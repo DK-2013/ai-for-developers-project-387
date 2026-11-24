@@ -1,0 +1,248 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mokevnin/easement/main/easement.schema.json
+version: 1
+
+# Components follow the seams already documented in CODING_STANDARDS.md:
+# a server composition root, an HTTP boundary, feature slices, pure domain logic,
+# storage, and the generated wire SDK on the web side.
+components:
+  server-entry:
+    in:
+      - packages/server/src/index.ts
+      - packages/server/src/start.ts
+      - packages/server/src/http.ts
+      - packages/server/src/web.ts
+    public:
+      - packages/server/src/start.ts
+      - packages/server/src/http.ts
+      - packages/server/src/web.ts
+    allow_importers: [tests]
+    because: only the process and its tests assemble the server; features belong behind server-api
+
+  server-api:
+    in: packages/server/src/app.ts
+    public: packages/server/src/app.ts
+    because: app.ts is the only wire-to-domain boundary; transport stays in server-entry
+
+  server-bookings:
+    in: packages/server/src/bookings
+    because: booking use cases are one feature slice; shared rules belong in server-domain
+
+  server-meeting-types:
+    in: packages/server/src/meeting-types
+    because: meeting types are one feature slice; shared rules belong in server-domain
+
+  server-slots:
+    in: packages/server/src/slots
+    because: this package only reads occupied intervals; slot computation belongs in server-domain
+
+  server-domain:
+    in: packages/server/src/domain
+    because: pure booking and owner-time rules live here, independent of HTTP and storage
+
+  server-db:
+    in: packages/server/src/db
+    except:
+      - packages/server/src/db/errors.ts
+      - packages/server/src/db/time.ts
+    public:
+      - packages/server/src/db/schema.ts
+      - packages/server/src/db/availability.ts
+      - packages/server/src/db/migrate.ts
+      - packages/server/src/db/prepare-database.ts
+      - packages/server/src/db/clean.ts
+      - packages/server/src/db/retry-preparation.ts
+      - packages/server/src/db/seed.ts
+    because: schema, migrations and database startup live here; row mapping belongs in server-db-adapters
+
+  server-db-adapters:
+    in:
+      - packages/server/src/db/errors.ts
+      - packages/server/src/db/time.ts
+    because: SQLSTATE and timestamptz mapping belongs here, next to storage and used by repositories
+
+  server-shared:
+    in:
+      - packages/server/src/config.ts
+      - packages/server/src/clock.ts
+      - packages/server/src/logging.ts
+    because: settings, clock and logger are injected from here; feature code never reads the environment
+
+  server-testhelpers:
+    in: packages/server/test/helpers
+    allow_importers: [tests]
+    because: this helper creates isolated test databases, it is not part of the running server
+
+  web-app:
+    in:
+      - packages/web/src/main.tsx
+      - packages/web/src/app.tsx
+    because: main mounts the app and app owns routes; data and views belong to their own components
+
+  web-pages:
+    in: packages/web/src/pages
+    because: pages compose route-level view and query options; reusable views belong in web-components
+
+  web-components:
+    in: packages/web/src/components
+    because: components render props and injected query options; pages decide which to show
+
+  web-api:
+    in: packages/web/src/api
+    because: this is the one hand-written HTTP boundary; wire types come only from web-sdk
+
+  web-lib:
+    in: packages/web/src/lib
+    because: these are pure helpers; fetching stays in web-api and rendering in web-components
+
+  web-testhelpers:
+    in: packages/web/src/test/render-app.tsx
+    allow_importers: [tests]
+    because: this helper renders the real app in tests, production code never imports it
+
+common: [server-shared, server-db-adapters]
+
+sets:
+  server:
+    - server-entry
+    - server-api
+    - server-bookings
+    - server-meeting-types
+    - server-slots
+    - server-domain
+    - server-db
+    - server-db-adapters
+    - server-shared
+    - server-testhelpers
+  web:
+    - web-app
+    - web-pages
+    - web-components
+    - web-api
+    - web-lib
+    - web-testhelpers
+
+x-no-web: &no-web
+  must_not_depend_on:
+    - name: '@web'
+      because: server and web deploy separately; wire types come through generated code
+
+x-no-server: &no-server
+  must_not_depend_on:
+    - name: '@server'
+      because: the browser bundle never imports server code; the generated SDK is the contract
+
+# Top to bottom. Siblings in one layer never import each other.
+layers:
+  - tests
+  - [server-testhelpers, web-testhelpers]
+  - [server-entry, web-app]
+  - [server-api, web-pages]
+  - [server-bookings, server-meeting-types, server-slots, web-components]
+  - [server-domain, server-db, web-api, web-lib]
+
+no_cycles: true
+tests: auto
+
+# Nothing crosses the package boundary today; pin the decision so a future
+# grant cannot silently allow it.
+examples:
+  - from: packages/server/src/app.ts
+    to: packages/web/src/api/queries.ts
+    expect: rejected
+    rule: dependency
+    because: server and web deploy separately; wire types come through generated code
+  - from: packages/web/src/pages/booking-page.tsx
+    to: packages/server/src/app.ts
+    expect: rejected
+    rule: dependency
+    because: the browser bundle never imports server code; the generated SDK is the contract
+
+rules:
+  server-entry:
+    <<: *no-web
+    may_depend_on: [server-api, server-db]
+    because: composition wires the HTTP boundary and storage; feature logic belongs in the feature components
+  server-api:
+    <<: *no-web
+    may_depend_on: [server-bookings, server-meeting-types, server-slots, server-domain, server-db]
+    because: HTTP handlers map wire types and call feature repositories; transport stays in server-entry
+  server-bookings:
+    <<: *no-web
+    may_depend_on: [server-db]
+    because: booking rules belong in server-domain and writes go through storage, never through HTTP
+  server-meeting-types:
+    <<: *no-web
+    may_depend_on: [server-db]
+    because: meeting-type persistence belongs here; validation of a request body stays in this slice
+  server-slots:
+    <<: *no-web
+    may_depend_on: [server-domain, server-db]
+    because: free-slot computation belongs in server-domain, occupied intervals come from storage
+  server-domain:
+    <<: *no-web
+    because: domain rules take typed values and a clock; they know neither HTTP nor storage
+  server-db:
+    <<: *no-web
+    because: storage owns schema and startup; repositories in feature slices are its callers
+  server-db-adapters:
+    <<: *no-web
+    because: SQLSTATE and time mapping belongs at the storage edge, not in domain or HTTP code
+  server-shared:
+    <<: *no-web
+    because: settings are parsed once here and injected; feature code must not read process.env
+  server-testhelpers:
+    <<: *no-web
+    may_depend_on: [server-db]
+    because: test databases are set up from the real schema, not from a duplicate test schema
+  web-app:
+    <<: *no-server
+    may_depend_on: [web-pages]
+    because: the app only routes to pages; fetching belongs in web-api and views in web-components
+  web-pages:
+    <<: *no-server
+    may_depend_on: [web-components, web-api, web-lib]
+    because: pages compose views and query options; reusable rendering belongs in web-components
+  web-components:
+    <<: *no-server
+    may_depend_on: [web-api, web-lib]
+    because: views use query options and pure helpers; pages decide which view to render
+  web-api:
+    <<: *no-server
+    because: every call and wire type comes from the generated client, never from a second hand-written client
+  web-lib:
+    <<: *no-server
+    because: helpers only read SDK model types; network calls belong in web-api
+  web-testhelpers:
+    <<: *no-server
+    may_depend_on: [web-app, web-api]
+    because: rendering tests use the real app and query options, not a copy of their setup
+  tests:
+    may_depend_on:
+      - server-entry
+      - server-api
+      - server-bookings
+      - server-meeting-types
+      - server-slots
+      - server-domain
+      - server-db
+      - server-db-adapters
+      - server-shared
+      - server-testhelpers
+      - web-app
+      - web-pages
+      - web-components
+      - web-api
+      - web-lib
+      - web-testhelpers
+    because: tests exercise real production seams; production code never imports test files or helpers
+
+# Repository tooling is intentionally outside any tsconfig: it is not application code.
+accepted_gaps:
+  - kind: uncovered
+    files:
+      - commitlint.config.mjs
+      - dependency-cruiser.cjs
+      - packages/server/drizzle.config.ts
+      - packages/server/vitest.config.ts
+      - scripts/**
+    because: build and repo tooling is not part of either tsconfig and is not application code

@@ -15,6 +15,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  architecture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          install: true
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate code
+        run: pnpm codegen
+
+      # A pull request is judged only on the imports it adds; the default
+      # branch checks the whole project and catches unused allowances.
+      - name: Check architecture on a pull request
+        if: github.event_name == 'pull_request'
+        uses: mokevnin/easement@bd43cde8f51af3b6267225f0d8cdf2d758139b5f # v0.11.1
+        with:
+          version: 0.11.1
+          diff: origin/${{ github.base_ref }}
+
+      - name: Check architecture on the default branch
+        if: github.event_name != 'pull_request'
+        uses: mokevnin/easement@bd43cde8f51af3b6267225f0d8cdf2d758139b5f # v0.11.1
+        with:
+          version: 0.11.1
+
+      - name: Check unused allowances
+        if: github.event_name != 'pull_request'
+        run: easement check --suggest
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30

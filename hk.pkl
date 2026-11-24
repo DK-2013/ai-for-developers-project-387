@@ -167,6 +167,11 @@ local depcruise = new Step {
   check = "pnpm deps:check"
 }
 
+// The architecture check reads the whole project, so it belongs on pre-push.
+local easement = new Step {
+  check = "easement check"
+}
+
 local test = new Step {
   check = "mise run test"
 }
@@ -213,6 +218,7 @@ hooks {
       ["knip"] = knip
       ["typecheck"] = typecheck
       ["depcruise"] = depcruise
+      ["easement"] = easement
       ["test"] = test
       ["betterleaks"] = betterleaks
       ["suppressionDates"] = suppressionDates
@@ -234,6 +240,7 @@ hooks {
       ["knip"] = knip
       ["typecheck"] = typecheck
       ["depcruise"] = depcruise
+      ["easement"] = easement
       ["test"] = test
       ["betterleaks"] = betterleaks
       ["suppressionDates"] = suppressionDates

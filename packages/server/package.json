@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "db:clean": "tsx src/db/clean-cli.ts",
     "db:generate": "drizzle-kit generate",
     "dev": "tsx watch src/index.ts",
