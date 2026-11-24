@@ -187,96 +187,15 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          if [ -z "${PR_NUMBER:-}" ]; then
-            echo "::notice::Not a pull request; no ledger entry is recorded."
-            exit 0
-          fi
-
-          info=$(
-            gh api --paginate \
-              "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "opencode") | [
-                ([.steps[]? | select(.name == "Preflight") | .conclusion][0] // ""),
-                ([.steps[]? | select(.name == "Mark agent start") | .conclusion][0] // ""),
-                (.conclusion // ""),
-                (.started_at // "")
-              ] | @tsv' |
-              head -n 1
-          )
-          IFS=$'\t' read -r preflight_result marker opencode_result opencode_started <<< "$info"
-
-          # The jobs endpoint also returns jobs from earlier attempts. If the
-          # opencode job started before this attempt, only this job was rerun
-          # (for example `record`), so it must not create a second entry.
-          attempt_started=$(
-            gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" \
-              --jq '.run_started_at'
-          )
-          if [ -n "$opencode_started" ] && [[ "$opencode_started" < "$attempt_started" ]]; then
-            echo "::notice::The opencode job did not run in attempt $RUN_ATTEMPT; no ledger entry."
-            exit 0
-          fi
-
-          if [ "$preflight_result" != "success" ]; then
-            echo "::notice::Preflight did not pass (${preflight_result:-absent}); no ledger entry."
-            exit 0
-          fi
-
-          if [ "$marker" != "success" ]; then
-            case "${opencode_result:-}" in
-              cancelled|skipped|"")
-                # Admission already happened; a cancellation before the marker
-                # is still a spent attempt. An empty result means the job was
-                # admitted but never appeared in this attempt.
-                echo "::notice::The admitted attempt stopped before the model boundary; recording it."
-                ;;
-              *)
-                echo "::notice::The model boundary was not reached (marker: ${marker:-absent}, opencode: ${opencode_result}); no ledger entry."
-                exit 0
-                ;;
-            esac
-          fi
-
-          # The ledger script owns the title format and the count, so the
-          # preflight and record jobs cannot drift apart.
-          script="$RUNNER_TEMP/oc-budget.sh"
+          script="$RUNNER_TEMP/oc-record.sh"
           if ! gh api \
-            "repos/$REPO/contents/scripts/oc-budget.sh?ref=$DEFAULT_BRANCH" \
+            "repos/$REPO/contents/scripts/oc-record.sh?ref=$DEFAULT_BRANCH" \
             --jq .content |
             base64 -d > "$script"; then
-            echo "::error::Cannot read scripts/oc-budget.sh from $DEFAULT_BRANCH."
+            echo "::error::Cannot read scripts/oc-record.sh from $DEFAULT_BRANCH."
             exit 1
           fi
-          ledger_has() {
-            local result
-            if ! result=$(bash "$script" has); then
-              echo "::error::Cannot read the ledger."
-              exit 1
-            fi
-            [ "$result" = "true" ]
-          }
-
-          if ledger_has; then
-            echo "::notice::This attempt already has a ledger entry; nothing to record."
-            exit 0
-          fi
-          # The ledger workflow is the counter. This job dispatches it after
-          # the model (or an admitted cancellation). Maintainers reset the PR
-          # budget by deleting its ledger runs; the agent never has actions:write.
-          gh workflow run oc-budget-ledger.yml \
-            --repo "$REPO" --ref "$DEFAULT_BRANCH" \
-            -f pr="$PR_NUMBER" -f run="$RUN_ID" -f attempt="$RUN_ATTEMPT"
-
-          # Wait until the entry is visible, so the next queued /oc counts it.
-          for _ in $(seq 1 30); do
-            if ledger_has; then
-              echo "::notice::Ledger entry recorded for PR #$PR_NUMBER."
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::The ledger entry did not appear; the budget may undercount."
-          exit 1
+          bash "$script"
 
   # Publishes why the model did not finish, without a model or secrets.
   report:
@@ -311,63 +230,12 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          if [ "$BUDGET_ALLOWED" != "true" ]; then
-            case "${BUDGET_REASON:-infra}" in
-              limit_exhausted)
-                reason=limit_exhausted
-                detail="Бюджет запросов к агенту на этот PR исчерпан (${USED:-?} из ${LIMIT:-?}). Модель не вызывалась."
-                ;;
-              fork)
-                reason=fork
-                detail="PR создан из fork: его код не должен видеть ключ модели. Запуск отклонён."
-                ;;
-              *)
-                reason=infra
-                detail="Сбой проверки перед вызовом модели (бюджет, права App или конфигурация лимита). Модель не вызывалась."
-                ;;
-            esac
-          elif [ "$AGENT_RESULT" = "success" ]; then
-            if [ "${ON_PR:-false}" != "true" ] || [ "$RECORD_RESULT" = "success" ]; then
-              exit 0
-            fi
-            reason=infra
-            detail="Не удалось записать попытку в бюджет; счётчик мог не увеличиться."
-          elif [ "$AGENT_RESULT" = "cancelled" ]; then
-            reason=infra
-            detail="Агент был остановлен после допуска; попытка учтена в бюджете."
-          else
-            case "${AGENT_REASON:-}:${MODEL_STARTED:-}" in
-              timeout:*)
-                reason=timeout
-                detail="Агент не уложился в отведённое время и был остановлен."
-                ;;
-              :true)
-                reason=agent_failed
-                detail="Агент завершился ошибкой после старта модели."
-                ;;
-              :*)
-                reason=infra
-                detail="Сбой подготовки до вызова модели."
-                ;;
-              *)
-                reason="$AGENT_REASON"
-                detail="Агент завершился ошибкой или был остановлен."
-                ;;
-            esac
+          script="$RUNNER_TEMP/oc-report.sh"
+          if ! gh api \
+            "repos/$REPO/contents/scripts/oc-report.sh?ref=${{ github.event.repository.default_branch }}" \
+            --jq .content |
+            base64 -d > "$script"; then
+            echo "::error::Cannot read scripts/oc-report.sh from default branch."
+            exit 1
           fi
-
-          sha=$GITHUB_SHA
-          if [ "${ON_PR:-false}" = "true" ]; then
-            sha=$(gh pr view "$NUMBER" --repo "$REPO" --json headRefOid --jq .headRefOid) || sha=$GITHUB_SHA
-          fi
-
-          body="$RUNNER_TEMP/oc-report.md"
-          cat > "$body" <<EOF
-          **Нужен человек.** Причина: \`$reason\`.
-
-          $detail
-
-          - Последний SHA: \`$sha\`
-          - Логи: $RUN_URL
-          EOF
-          gh issue comment "$NUMBER" --repo "$REPO" --body-file "$body"
+          bash "$script"
