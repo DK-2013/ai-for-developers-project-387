@@ -200,13 +200,13 @@ a network error and no success message.
 **Action:** click the created type card and wait for the slot grid.
 
 **Expected:** the URL becomes `/book/{id}`. The heading is `Выбор времени`, followed by
-`<name> · 30 мин`. When the guest browser zone differs from the owner zone, the line
-`Часовой пояс владельца: Europe/Moscow.` is shown (the zone reflects the owner config); when the
-zones match, no zone reference is shown. Slots are grouped under day headings in the guest's
-browser zone, and the link `Назад к списку типов встреч` points to `/`. With the default
-configuration every start is on the 15-minute grid and fits inside `10:00`–`18:00` owner time on a
-weekday, and no start is at or before the current moment. When no slot fits the remaining window,
-the page shows `Нет свободных слотов в ближайшие 14 дней.`.
+`<name> · 30 мин`, and there is no form. When the guest browser zone differs from the owner zone, the
+line `Часовой пояс владельца: Europe/Moscow.` is shown (the zone reflects the owner config); when the
+zones match, no zone reference is shown. Slots are links to `/book/{id}/details?startAt=<RFC 3339 UTC instant>`
+grouped under day headings in the guest's browser zone, and the link `Назад к списку типов встреч`
+points to `/`. With the default configuration every start is on the 15-minute grid and fits inside
+`10:00`–`18:00` owner time on a weekday, and no start is at or before the current moment. When no slot
+fits the remaining window, the page shows `Нет свободных слотов в ближайшие 14 дней.`.
 
 The owner's zone fixes the grid; only the display follows the browser zone. To check the display
 zone, compare a slot's rendered time with the same instant in the browser's zone: changing the
@@ -226,43 +226,54 @@ instants.
 календарь в часовом поясе своего браузера`, and `Окно бронирования сдвигается с течением времени` in
 [Checkpoints](../SPEC.md#checkpoints).
 
-### 8. Guest books a free slot
+### 8. Guest books a free slot on the details step
 
-**Action:** click a free slot, fill `Имя` with a unique name and `E-mail` with a valid address,
-then submit `Забронировать`.
+**Action:** click a free slot, check the details step, then fill `Имя` with a unique name and
+`E-mail` with a valid address and submit `Забронировать`. Refresh the details step before submitting
+to check a direct visit.
 
-**Expected:** the form is replaced by the section `Вы записаны` with the meeting type name, the day
-and start time in the guest zone, and the attendee name and e-mail. Returning to the same booking
-page (or refreshing it) no longer offers that start.
+**Expected:** the click opens `/book/{id}/details?startAt=<RFC 3339 UTC instant>` with only `startAt` in the
+address; the heading is `Данные для записи`, the chosen day and time are in the guest zone, and the
+form starts empty. A direct visit and a refresh with the same address keep that step and slot; the
+day comes from a fresh slots response, not from the URL. `Описание (необязательно)` accepts up to 1000
+code points including newlines, has no `maxlength`, and whitespace-only text is treated as absent.
+There is an explicit link `Назад к выбору времени`. After submit the same step shows the section
+`Вы записаны` with the meeting type name, the day and start time in the guest zone, and the attendee
+name and e-mail. Returning to the slot grid no longer offers that start.
 
 **Console:** no errors.
 
-**Network:** `POST /api/bookings` returns `201` with the booking `id`, `meetingTypeId`,
-`meetingTypeName`, `startAt`, `endAt`, `attendeeName`, and `attendeeEmail`. The slot list is
-refetched afterwards.
+**Network:** `GET /api/meeting-types/{id}/slots` supplies the slot after the details step opens;
+`POST /api/bookings` returns `201` with the booking `id`, `meetingTypeId`, `meetingTypeName`,
+`startAt`, `endAt`, `attendeeName`, and `attendeeEmail`.
 
-**SPEC:** checkpoint `Гость может забронировать свободный слот` in
-[Checkpoints](../SPEC.md#checkpoints).
+**SPEC:** checkpoints `Гость видит форму данных на отдельном шаге после выбора слота` and
+`Гость может забронировать свободный слот` in [Checkpoints](../SPEC.md#checkpoints).
 
-### 9. Booking conflict shows a clear message
+### 9. Booking conflict keeps the guest on the details step
 
-**Action:** in the booking page, select a free slot but do not submit yet. In a second tab (or with
-`curl`), book the same `startAt` through `POST /api/bookings`. Return to the first tab and submit the
-name and e-mail form.
+**Action:** click a free slot, fill the name and e-mail on the details step but do not submit yet.
+In a second tab (or with `curl`), book the same `startAt` through `POST /api/bookings`. Return to the
+first tab and submit the form.
 
-**Expected:** the message `Это время уже занято. Пожалуйста, выберите другой слот.` appears, the
-selection is cleared, and the slot grid refreshes without the taken start. The page does not show a
-success state.
+**Expected:** the URL stays on `/book/{id}/details?startAt=<RFC 3339 UTC instant>`. The message
+`Это время уже занято. Пожалуйста, выберите другой слот.` and the link `Выбрать другое время` appear;
+the entered name and e-mail stay in the fields, and there is no success state. Clicking
+`Выбрать другое время` returns to the slot grid, where the taken start is gone.
+
+Also open `/book/{id}/details` and `/book/{id}/details?startAt=<unknown instant>` directly: both
+return to `/book/{id}?notice=invalid-start` with `Выбранное время недоступно. Пожалуйста, выберите
+другое время.` and no form.
 
 **Console:** no uncaught page errors. The browser logs the rejected request as
 `Failed to load resource ... 409`; that is the expected conflict response.
 
 **Network:** the first `POST /api/bookings` returns `201`; the second returns
-`409 {"code":"slot_not_available","message":"Slot is not available"}` followed by a fresh
-`GET /api/meeting-types/{id}/slots`.
+`409 {"code":"slot_not_available","message":"Slot is not available"}`. The grid fetches a fresh
+`GET /api/meeting-types/{id}/slots` after `Выбрать другое время`.
 
-**SPEC:** checkpoint `Повторное бронирование того же времени возвращает 409` in
-[Checkpoints](../SPEC.md#checkpoints).
+**SPEC:** checkpoints `Повторное бронирование того же времени возвращает 409` and `Недоступный
+startAt возвращает к выбору времени с сообщением` in [Checkpoints](../SPEC.md#checkpoints).
 
 ### 10. Overlap rules: partial overlap and back-to-back starts
 
@@ -282,7 +293,7 @@ returns `201` and its `startAt` equals the previous `endAt`.
 ### 11. Concurrent requests for one slot
 
 **Action:** pick a free start and send two `POST /api/bookings` requests for it at the same time
-(for example two tabs submitting the same stale selection, or two parallel `curl` processes).
+(for example two tabs on the same details address, or two parallel `curl` processes).
 
 **Expected:** exactly one response is `201`; the other is `409 slot_not_available`. Refreshing the
 slot grid shows the start once as taken.
@@ -319,12 +330,15 @@ with no upcoming bookings, `Пока нет предстоящих встреч.
 1. click `Назад к списку типов встреч` and wait for `/`;
 2. click `Личный кабинет` and wait for `/owner`;
 3. click `Типы встреч` and wait for `/owner/meeting-types`;
-4. use browser Back twice and Forward twice.
+4. use browser Back twice and Forward twice;
+5. from `/book/{id}`, click a slot, then use browser Back.
 
 **Expected:** every in-app link updates the URL and the main content without a full page reload. The
 header stays in place. Back and Forward restore the previous URL and page, including the active tab
 and the single `h1` of each section. After the final Forward the URL is `/owner/meeting-types` and
-the `Типы встреч` tab is active. On `/` the public list from step 6 appears.
+the `Типы встреч` tab is active. On `/` the public list from step 6 appears. Browser Back from the
+details step returns to `/book/{id}` with the empty slot grid and no selection or form restored; the
+link `Назад к выбору времени` does the same from the details step.
 
 **Console:** no errors. Only the unknown-route warning from step 14 is allowed, and only on that
 route.

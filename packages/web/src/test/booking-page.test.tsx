@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { slotsQuery } from "../api/queries";
+import { INVALID_START_MESSAGE } from "../lib/booking-details";
 import { BookingPage } from "../pages/booking-page";
 import { createQueryClient } from "./render-app";
 
@@ -20,12 +21,16 @@ function slotList(slots: SlotList["slots"]): SlotList {
   };
 }
 
-function renderPage(slots: SlotList, guestTimeZone: string = "Asia/Tokyo"): string {
+function renderPage(
+  slots: SlotList,
+  guestTimeZone: string = "Asia/Tokyo",
+  search: string = "",
+): string {
   const queryClient = createQueryClient(meetingTypes, { meetingTypeId: "intro", slots });
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/book/intro"]}>
+      <MemoryRouter initialEntries={[`/book/intro${search}`]}>
         <Routes>
           <Route path="/book/:id" element={<BookingPage guestTimeZone={guestTimeZone} />} />
         </Routes>
@@ -78,6 +83,13 @@ describe("booking page", () => {
 
     expect(markup).toContain("Нет свободных слотов в ближайшие 14 дней.");
     expect(markup).not.toContain("Часовой пояс владельца");
+  });
+
+  it("shows the invalid-start message when redirected from the details step", () => {
+    const markup = renderPage(slotList([]), "Asia/Tokyo", "?notice=invalid-start");
+
+    expect(markup).toContain(INVALID_START_MESSAGE);
+    expect(markup).toContain('role="alert"');
   });
 
   it("shows the API error when slots cannot be loaded", () => {

@@ -1,12 +1,7 @@
-import type { Booking, MeetingType, Slot } from "@calendar/sdk";
-import { useState, type FormEvent, type ReactNode } from "react";
+import type { MeetingType, Slot } from "@calendar/sdk";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import {
-  activeDay,
-  type BookingFormState,
-  type GuestSelection,
-  isSlotSelected,
-} from "../lib/booking-selection";
+import { activeDay } from "../lib/booking-selection";
 import {
   buildBookingCalendar,
   type BookingCalendar,
@@ -16,12 +11,6 @@ import {
 } from "../lib/slots";
 
 type MeetingTypeSummary = Pick<MeetingType, "name" | "durationMinutes">;
-
-const MAX_DESCRIPTION_LENGTH = 1000;
-
-export function codePointLength(value: string): number {
-  return [...value].length;
-}
 
 export type BookingSlotsViewProps =
   | { status: "loading"; meetingType?: MeetingTypeSummary }
@@ -34,10 +23,10 @@ export type BookingSlotsViewProps =
       windowStart: Date;
       windowEnd: Date;
       slots: readonly Slot[];
-      selection: GuestSelection;
-      onSelectSlot?: (slot: Slot) => void;
+      slotHref: (slot: Slot) => string;
+      activeDayKey?: string;
+      notice?: string;
       onSelectDay?: (dayKey: string) => void;
-      onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
     };
 
 type ReadyProps = Extract<BookingSlotsViewProps, { status: "ready" }>;
@@ -55,109 +44,6 @@ function MeetingTypeHeading({ meetingType }: { meetingType?: MeetingTypeSummary 
     <p className="mt-2 text-sm text-muted-foreground">
       {meetingType.name} · {meetingType.durationMinutes} мин
     </p>
-  );
-}
-
-function SuccessContent({ booking, guestTimeZone }: { booking: Booking; guestTimeZone: string }) {
-  return (
-    <section
-      aria-label="Подтверждение бронирования"
-      className="mt-6 space-y-2 rounded-md border border-border p-4"
-    >
-      <h2 className="text-lg font-semibold">Вы записаны</h2>
-      <p>
-        {booking.meetingTypeName} · {formatSlotDay(booking.startAt, guestTimeZone)},{" "}
-        {formatSlotTime(booking.startAt, guestTimeZone)}
-      </p>
-      <p className="text-sm text-muted-foreground">
-        {booking.attendeeName}, {booking.attendeeEmail}
-      </p>
-      {booking.description ? (
-        <p className="whitespace-pre-line text-sm">Описание: {booking.description}</p>
-      ) : null}
-    </section>
-  );
-}
-
-function BookingForm({
-  slot,
-  guestTimeZone,
-  state,
-  onSubmit,
-}: {
-  slot: Slot;
-  guestTimeZone: string;
-  state: BookingFormState;
-  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const [description, setDescription] = useState("");
-  const submitting = state.status === "submitting";
-  const descriptionLength = codePointLength(description);
-  const descriptionTooLong = descriptionLength > MAX_DESCRIPTION_LENGTH;
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-    if (descriptionTooLong) {
-      event.preventDefault();
-      return;
-    }
-
-    onSubmit?.(event);
-  }
-
-  return (
-    <form className="mt-6 grid gap-4 rounded-md border border-border p-4" onSubmit={handleSubmit}>
-      <p className="text-sm font-medium">
-        Выбрано: {formatSlotDay(slot.startAt, guestTimeZone)},{" "}
-        {formatSlotTime(slot.startAt, guestTimeZone)}
-      </p>
-      <label className="grid gap-1 text-sm font-medium">
-        Имя
-        <input
-          className="rounded-md border border-border bg-background px-3 py-2"
-          maxLength={200}
-          name="attendeeName"
-          required
-        />
-      </label>
-      <label className="grid gap-1 text-sm font-medium">
-        E-mail
-        <input
-          className="rounded-md border border-border bg-background px-3 py-2"
-          maxLength={254}
-          name="attendeeEmail"
-          required
-          type="email"
-        />
-      </label>
-      <label className="grid gap-1 text-sm font-medium">
-        Описание (необязательно)
-        <textarea
-          aria-describedby="booking-description-hint"
-          className="rounded-md border border-border bg-background px-3 py-2"
-          id="booking-description"
-          name="description"
-          onChange={(event) => setDescription(event.target.value)}
-          rows={3}
-          value={description}
-        />
-      </label>
-      <span
-        className="text-xs text-muted-foreground"
-        id="booking-description-hint"
-        role={descriptionTooLong ? "alert" : undefined}
-      >
-        {descriptionTooLong
-          ? `Описание длиннее ${MAX_DESCRIPTION_LENGTH} символов: сейчас ${descriptionLength}`
-          : `До ${MAX_DESCRIPTION_LENGTH} символов`}
-      </span>
-      <button
-        className="justify-self-start rounded-md border border-border bg-background px-4 py-2 hover:bg-muted disabled:opacity-50"
-        disabled={submitting || descriptionTooLong}
-        type="submit"
-      >
-        {submitting ? "Бронирование..." : "Забронировать"}
-      </button>
-    </form>
   );
 }
 
@@ -250,18 +136,6 @@ function TimeZoneReference({
   return <p className="text-sm text-muted-foreground">Часовой пояс владельца: {timezone}.</p>;
 }
 
-function BookingError({ state }: { state: BookingFormState }) {
-  if (state.status !== "error") {
-    return null;
-  }
-
-  return (
-    <p className="text-sm text-muted-foreground" role="alert">
-      {state.message}
-    </p>
-  );
-}
-
 function CalendarDayCell({
   day,
   active,
@@ -344,25 +218,18 @@ function BookingCalendarNav({
 
 function SlotOption({
   slot,
-  selected,
   guestTimeZone,
-  onSelect,
+  href,
 }: {
   slot: Slot;
-  selected: boolean;
   guestTimeZone: string;
-  onSelect?: (slot: Slot) => void;
+  href: string;
 }) {
   return (
     <li>
-      <PressableButton
-        base="rounded-md border border-border"
-        onPress={() => onSelect?.(slot)}
-        pressed={selected}
-        size="px-3 py-2 text-sm"
-      >
+      <Link className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted" to={href}>
         {formatSlotTime(slot.startAt, guestTimeZone)}
-      </PressableButton>
+      </Link>
     </li>
   );
 }
@@ -371,16 +238,12 @@ function DaySlots({
   heading,
   day,
   guestTimeZone,
-  selection,
-  onSelectSlot,
-  onSubmit,
+  slotHref,
 }: {
   heading: string;
   day: BookingCalendarDay;
   guestTimeZone: string;
-  selection: GuestSelection;
-  onSelectSlot?: (slot: Slot) => void;
-  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
+  slotHref: (slot: Slot) => string;
 }) {
   return (
     <section aria-label="Свободные слоты">
@@ -389,51 +252,34 @@ function DaySlots({
         {day.slots.map((slot) => (
           <SlotOption
             guestTimeZone={guestTimeZone}
+            href={slotHref(slot)}
             key={slot.startAt.toISOString()}
-            onSelect={onSelectSlot}
-            selected={isSlotSelected(selection, slot)}
             slot={slot}
           />
         ))}
       </ul>
-      {selection.selectedSlot ? (
-        <BookingForm
-          guestTimeZone={guestTimeZone}
-          onSubmit={onSubmit}
-          slot={selection.selectedSlot}
-          state={selection.form}
-        />
-      ) : null}
     </section>
   );
 }
 
 function SlotsContent({ props }: { props: ReadyProps }) {
-  if (props.selection.form.status === "success") {
-    return (
-      <div className="mt-6 space-y-6">
-        <TimeZoneReference timezone={props.timezone} guestTimeZone={props.guestTimeZone} />
-        <SuccessContent
-          booking={props.selection.form.booking}
-          guestTimeZone={props.guestTimeZone}
-        />
-      </div>
-    );
-  }
-
   const calendar = buildBookingCalendar(
     props.windowStart,
     props.windowEnd,
     props.slots,
     props.guestTimeZone,
   );
-  const shownDay = activeDay(props.selection, calendar);
+  const shownDay = activeDay(calendar, props.activeDayKey);
   const activeStart = shownDay?.slots.at(0)?.startAt;
 
   return (
     <div className="mt-6 space-y-6">
       <TimeZoneReference timezone={props.timezone} guestTimeZone={props.guestTimeZone} />
-      <BookingError state={props.selection.form} />
+      {props.notice === undefined ? null : (
+        <p className="text-sm" role="alert">
+          {props.notice}
+        </p>
+      )}
       {shownDay === undefined || activeStart === undefined ? (
         <p className="text-muted-foreground">Нет свободных слотов в ближайшие 14 дней.</p>
       ) : (
@@ -447,9 +293,7 @@ function SlotsContent({ props }: { props: ReadyProps }) {
             day={shownDay}
             guestTimeZone={props.guestTimeZone}
             heading={formatSlotDay(activeStart, props.guestTimeZone)}
-            onSelectSlot={props.onSelectSlot}
-            onSubmit={props.onSubmit}
-            selection={props.selection}
+            slotHref={props.slotHref}
           />
         </div>
       )}

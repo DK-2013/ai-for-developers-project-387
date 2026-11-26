@@ -41,6 +41,22 @@ export function slotsQuery(meetingTypeId: string) {
   });
 }
 
+/**
+ * The details step resolves its slot once from a fresh response. Keeping its
+ * own key prevents a background refetch from replacing the slot under an open
+ * form; leaving the step drops the cache so the next visit fetches again.
+ */
+export function detailsSlotsQuery(meetingTypeId: string) {
+  return queryOptions({
+    queryKey: ["meeting-type-slots-details", meetingTypeId],
+    queryFn: () => apiClient.listSlots(meetingTypeId),
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
 export const bookingsQuery = queryOptions({
   queryKey: ["bookings"],
   queryFn: () => apiClient.listBookings(),
