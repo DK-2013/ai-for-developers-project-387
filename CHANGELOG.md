@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.6.0...v0.7.0) (2026-11-26)
+
+
+### Features
+
+* **ci:** count /oc budget in a separate Actions-history ledger ([#49](https://github.com/DK-2013/ai-for-developers-project-387/issues/49)) ([9cf4d0a](https://github.com/DK-2013/ai-for-developers-project-387/commit/9cf4d0a78f30cd0caf9728b3a6c211633eb20dc3))
+
+
+### Bug Fixes
+
+* **ci:** close /oc budget bypass on targeted rerun ([#64](https://github.com/DK-2013/ai-for-developers-project-387/issues/64)) ([af1b9a0](https://github.com/DK-2013/ai-for-developers-project-387/commit/af1b9a0517171fd714e2abd146e4b6763e8ee4a5))
+* **ci:** install browsers with repo-local Playwright ([ff9ec82](https://github.com/DK-2013/ai-for-developers-project-387/commit/ff9ec82a330d93d72d99286ea8e0c45a529f805e))
+* **ci:** scope ledger concurrency per pull request ([#64](https://github.com/DK-2013/ai-for-developers-project-387/issues/64)) ([66a15e9](https://github.com/DK-2013/ai-for-developers-project-387/commit/66a15e93be61e3011b2bd7b0fab56542ddbd9b9f))
+* **lighthouse:** apply the vanished-finding rule with no findings ([#40](https://github.com/DK-2013/ai-for-developers-project-387/issues/40)) ([720a438](https://github.com/DK-2013/ai-for-developers-project-387/commit/720a43874702eb950bbc39588bf40665df9b1106))
+* **lighthouse:** extract findings after failed budgets ([#40](https://github.com/DK-2013/ai-for-developers-project-387/issues/40)) ([ce7fc31](https://github.com/DK-2013/ai-for-developers-project-387/commit/ce7fc31833beb748ed20189cbf81820a3195e220))
+* **lighthouse:** upload hidden reports and filter issues by label ([#40](https://github.com/DK-2013/ai-for-developers-project-387/issues/40)) ([7208356](https://github.com/DK-2013/ai-for-developers-project-387/commit/720835683407954e5bc13c11b0e6caeab8f91ad1))
+
 ## [0.6.0](https://github.com/DK-2013/ai-for-developers-project-387/compare/v0.5.0...v0.6.0) (2026-11-21)
 
 
