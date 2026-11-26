@@ -1,5 +1,12 @@
 import type { Temporal } from "temporal-polyfill";
 
+/** The meeting-type facts a booking needs once its id is resolved. */
+export type ResolvedMeetingType = {
+  id: string;
+  name: string;
+  durationMinutes: number;
+};
+
 /** What a guest supplies to book a slot, before the meeting type is resolved. */
 export type CreateBookingInput = {
   meetingTypeId: string;

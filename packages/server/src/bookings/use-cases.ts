@@ -1,12 +1,10 @@
 import { Temporal } from "temporal-polyfill";
 import type { Clock } from "../clock.js";
 import type { OwnerConfig } from "../config.js";
+import { isValidMeetingTypeId } from "../domain/ids.js";
 import { bookableSlot, computeSlots, type SlotEngineResult } from "../domain/slots.js";
-import { bookingWindow } from "../domain/time/index.js";
-import type { MeetingTypeRepository } from "../meeting-types/repository.js";
-import { isValidMeetingTypeId } from "../meeting-types/validation.js";
-import type { SlotRepository } from "../slots/repository.js";
-import type { Booking, CreateBookingInput, NewBooking } from "./domain.js";
+import { bookingWindow, type BookingWindow, type InstantInterval } from "../domain/time/index.js";
+import type { Booking, CreateBookingInput, NewBooking, ResolvedMeetingType } from "./domain.js";
 import { BookingConflictError, type BookingRepository } from "./repository.js";
 
 export type { CreateBookingInput } from "./domain.js";
@@ -32,9 +30,17 @@ export type BookingUseCases = {
   createBooking(input: CreateBookingInput): Promise<Booking>;
 };
 
+type MeetingTypeLookup = {
+  findById(id: string): Promise<ResolvedMeetingType | undefined>;
+};
+
+type OccupiedSlotLookup = {
+  listOccupied(window: BookingWindow): Promise<InstantInterval[]>;
+};
+
 export type BookingUseCaseDependencies = {
-  meetingTypes: MeetingTypeRepository;
-  slots: SlotRepository;
+  meetingTypes: MeetingTypeLookup;
+  slots: OccupiedSlotLookup;
   bookings: BookingRepository;
   owner: OwnerConfig;
   clock: Clock;
