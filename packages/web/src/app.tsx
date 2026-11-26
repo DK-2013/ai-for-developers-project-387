@@ -4,6 +4,7 @@ import { OwnerLayout } from "./pages/owner-layout";
 import { OwnerMeetingTypesPage } from "./pages/owner-meeting-types-page";
 import { MeetingTypesPage } from "./pages/meeting-types-page";
 import { BookingPage } from "./pages/booking-page";
+import { BookingDetailsPage } from "./pages/booking-details-page";
 
 function Header() {
   return (
@@ -38,6 +39,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<MeetingTypesPage />} />
         <Route path="/book/:id" element={<BookingPage />} />
+        <Route path="/book/:id/details" element={<BookingDetailsPage />} />
         <Route path="/owner" element={<OwnerLayout />}>
           <Route index element={<OwnerBookingsPage />} />
           <Route path="meeting-types" element={<OwnerMeetingTypesPage />} />

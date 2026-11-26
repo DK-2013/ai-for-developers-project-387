@@ -61,5 +61,9 @@ The IANA zone of the guest's browser. The guest-facing calendar renders in it, w
 _Avoid_: Display zone, user locale
 
 **Guest selection**:
-The guest's current choice on the booking page: the selected slot, the selected day, and the form state. The selected slot always belongs to the selected day.
+The guest's two-step booking scenario: pick a slot on `/book/:id`, then enter the attendee details
+and submit on `/book/:id/details?startAt=<RFC 3339 UTC instant>`. Only the UTC instant travels in the
+address;
+the details step reads a fresh slot list, derives the day in the guest's time zone, and starts with an
+empty form.
 _Avoid_: Selection state, booking state, UI state

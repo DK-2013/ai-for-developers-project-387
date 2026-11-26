@@ -1,57 +1,57 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { CallCalendarClient } from "@calendar/sdk";
 
-test("a guest books a free slot and sees the confirmation", async ({ page, request }) => {
-  const meetingTypeName = `Booking ${Date.now()} ${Math.random().toString(16).slice(2)}`;
+const api = new CallCalendarClient({ allowInsecureConnection: true });
+
+const invalidStartMessage = "Выбранное время недоступно. Пожалуйста, выберите другое время.";
+
+async function createMeetingType(request: APIRequestContext, durationMinutes = 30) {
+  const response = await request.post("/api/meeting-types", {
+    data: {
+      name: `Booking ${Date.now()} ${Math.random().toString(16).slice(2)}`,
+      description: "Created for the booking E2E",
+      durationMinutes,
+    },
+  });
+
+  expect(response.status()).toBe(201);
+
+  return (await response.json()) as { id: string; name: string };
+}
+
+test("a guest books a free slot on the details step and sees the confirmation", async ({
+  page,
+  request,
+}) => {
+  const meetingType = await createMeetingType(request);
   const attendeeName = "Гость E2E";
   const attendeeEmail = "guest-e2e@example.com";
   const description = "😀".repeat(1000);
   const tooLongDescription = "😀".repeat(1001);
 
-  const createResponse = await request.post("/api/meeting-types", {
-    data: {
-      name: meetingTypeName,
-      description: "Created for the booking E2E",
-      durationMinutes: 30,
-    },
-  });
-  expect(createResponse.status()).toBe(201);
-  const meetingType = (await createResponse.json()) as { id: string };
-
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Выберите тип встречи" })).toBeVisible();
-  await page.getByRole("link", { name: new RegExp(meetingTypeName) }).click();
+  await page.getByRole("link", { name: new RegExp(meetingType.name) }).click();
 
   await expect(page).toHaveURL(new RegExp(`/book/${meetingType.id}$`));
   await expect(page.getByRole("heading", { name: "Выбор времени" })).toBeVisible();
-  await expect(page.getByText(`${meetingTypeName} · 30 мин`)).toBeVisible();
-
-  const slot = page.getByRole("button", { name: /^\d{2}:\d{2}$/ }).first();
-  await expect(slot).toBeVisible();
-  await slot.click();
-  await expect(page.locator('[name="attendeeName"]')).toBeVisible();
-
-  const activeDay = page.getByRole("button", { name: /^Выбрать /, pressed: true });
-  await activeDay.click();
-  await expect(page.locator('[name="attendeeName"]')).toBeVisible();
-  await expect(activeDay).toHaveAttribute("aria-pressed", "true");
-  await expect(slot).toHaveAttribute("aria-pressed", "true");
-
-  const oldSlotElement = await slot.elementHandle();
-  const slotsSection = page.getByRole("region", { name: "Свободные слоты" });
-  const activeDayBefore = await slotsSection.getByRole("heading").textContent();
-
-  await page
-    .getByRole("button", { name: /^Выбрать / })
-    .nth(1)
-    .click();
-
+  await expect(page.getByText(`${meetingType.name} · 30 мин`)).toBeVisible();
   await expect(page.locator('[name="attendeeName"]')).toHaveCount(0);
-  await expect(slotsSection.getByRole("heading")).not.toHaveText(activeDayBefore ?? "");
-  expect(await oldSlotElement?.evaluate((element) => element.isConnected)).toBe(false);
 
-  const otherDaySlot = page.getByRole("button", { name: /^\d{2}:\d{2}$/ }).first();
-  await otherDaySlot.click();
-  await expect(page.locator('[name="attendeeName"]')).toBeVisible();
+  const slot = page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first();
+  const slotTime = (await slot.textContent())?.trim() ?? "";
+  expect(slotTime).toMatch(/^\d{2}:\d{2}$/);
+  await slot.click();
+
+  await expect(page).toHaveURL(new RegExp(`/book/${meetingType.id}/details\\?startAt=`));
+  await expect(page.getByRole("heading", { name: "Данные для записи" })).toBeVisible();
+  await expect(page.getByText(new RegExp(slotTime))).toBeVisible();
+  const searchParams = [...new URL(page.url()).searchParams.keys()];
+  expect(searchParams).toEqual(["startAt"]);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Данные для записи" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Имя" })).toHaveValue("");
 
   const descriptionField = page.getByLabel("Описание (необязательно)");
   await expect(descriptionField).not.toHaveAttribute("maxlength");
@@ -73,14 +73,100 @@ test("a guest books a free slot and sees the confirmation", async ({ page, reque
 
   const response = await bookingResponse;
   expect(response.status()).toBe(201);
-
-  const postData = response.request().postData() ?? "{}";
-  const requestBody = JSON.parse(postData) as { description?: string };
+  const requestBody = JSON.parse(response.request().postData() ?? "{}") as {
+    description?: string;
+  };
   expect(requestBody.description).toBe(description);
 
   const confirmation = page.getByRole("region", { name: "Подтверждение бронирования" });
   await expect(confirmation.getByRole("heading", { name: "Вы записаны" })).toBeVisible();
   await expect(confirmation.getByText(`${attendeeName}, ${attendeeEmail}`)).toBeVisible();
-  await expect(confirmation.getByText(new RegExp(`^${meetingTypeName} · `))).toBeVisible();
+  await expect(confirmation.getByText(new RegExp(`^${meetingType.name} · `))).toBeVisible();
   await expect(confirmation).toContainText(description);
+  await expect(page).toHaveURL(new RegExp(`/book/${meetingType.id}/details\\?startAt=`));
+});
+
+test("the guest can go back explicitly, and browser back clears the old choice", async ({
+  page,
+  request,
+}) => {
+  const meetingType = await createMeetingType(request, 15);
+
+  await page.goto(`/book/${meetingType.id}`);
+  const slot = page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first();
+  const slotHref = await slot.getAttribute("href");
+  expect(slotHref).toBeTruthy();
+  await slot.click();
+
+  await expect(page.getByRole("textbox", { name: "Имя" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Имя" }).fill("Гость, которого не должно быть");
+
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/book/${meetingType.id}$`));
+  await expect(page.getByRole("heading", { name: "Выбор времени" })).toBeVisible();
+  await expect(page.locator('[name="attendeeName"]')).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first()).not.toHaveAttribute(
+    "aria-pressed",
+  );
+
+  await page.goto(slotHref ?? "");
+  await expect(page.getByRole("textbox", { name: "Имя" })).toHaveValue("");
+
+  await page.getByRole("link", { name: "Назад к выбору времени" }).click();
+  await expect(page).toHaveURL(new RegExp(`/book/${meetingType.id}$`));
+  await expect(page.getByRole("heading", { name: "Выбор времени" })).toBeVisible();
+});
+
+async function expectInvalidStart(page: Page, id: string) {
+  await expect(page).toHaveURL(new RegExp(`/book/${id}\\?notice=invalid-start$`));
+  await expect(page.getByRole("alert")).toHaveText(invalidStartMessage);
+  await expect(page.locator('[name="attendeeName"]')).toHaveCount(0);
+}
+
+test("a missing instant returns to the slot grid", async ({ page, request }) => {
+  const meetingType = await createMeetingType(request, 15);
+
+  await page.goto(`/book/${meetingType.id}/details`);
+
+  await expectInvalidStart(page, meetingType.id);
+});
+
+test("a malformed instant returns to the slot grid", async ({ page, request }) => {
+  const meetingType = await createMeetingType(request, 15);
+
+  await page.goto(`/book/${meetingType.id}/details?startAt=not-a-date`);
+
+  await expectInvalidStart(page, meetingType.id);
+});
+
+test("a booked instant returns to the slot grid", async ({ page, request }) => {
+  const meetingType = await createMeetingType(request, 15);
+  const slots = await api.listSlots(meetingType.id);
+
+  if ("code" in slots) {
+    throw new Error(`Could not list slots: ${slots.code}`);
+  }
+
+  const taken = slots.slots[0];
+
+  if (taken === undefined) {
+    throw new Error("No slots available to book");
+  }
+
+  const booking = await api.createBooking({
+    meetingTypeId: meetingType.id,
+    startAt: taken.startAt,
+    attendeeName: "Гость-владелец слота",
+    attendeeEmail: "taken-e2e@example.com",
+  });
+
+  if ("code" in booking) {
+    throw new Error(`Could not book the slot: ${booking.code}`);
+  }
+
+  await page.goto(
+    `/book/${meetingType.id}/details?startAt=${encodeURIComponent(taken.startAt.toISOString())}`,
+  );
+
+  await expectInvalidStart(page, meetingType.id);
 });
